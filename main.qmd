@@ -10,10 +10,10 @@ execute:
 ---
 
 # Load libraries and helper functions
-
 ```{r setup}
 source("R/packages.R")
 source("R/helpers.R")
+dir.create("data", recursive = TRUE, showWarnings = FALSE)
 ```
 
 # Grid parameters
@@ -34,6 +34,8 @@ We generate 2 outbreak scenarios:
 
 -   **Scenario B:** No overdispersion (Poisson: R=2)
 
+## Generate and save simulations
+The below will create 100 simulations of `A` and `B`, for each epidemic size, respectively.
 ```{r simulation-parameters}
 R_values_A <- rnbinom(100, size = 0.1, mu = 2)
 R_values_B <- rpois(100, lambda = 2)
@@ -46,39 +48,49 @@ try_gain <- 0.7 # run the loop again if we reach 70% or more of the target n_sim
 ```{r simulation-run}
 dir.create("data/sims", recursive = TRUE, showWarnings = FALSE)
 future::plan("future::multisession", workers = length(epidemic_sizes))
-sims <- future_map(epidemic_sizes, function(N) {
-  A <- simulate_outbreaks(
-    target_size = N,
-    R_values = R_values_A,
-    tolerance = tolerance,
-    n_simulations = n_simulations,
-    max_attempts = max_attempts,
-    try_gain = try_gain
+future_walk(seq_along(epidemic_sizes), function(i) {
+  N <- epidemic_sizes[i]
+  
+  sim <- list(
+    A = simulate_outbreaks(
+      target_size = N,
+      R_values = R_values_A,
+      tolerance = tolerance,
+      n_simulations = n_simulations,
+      max_attempts = max_attempts,
+      try_gain = try_gain
+    ),
+    B = simulate_outbreaks(
+      target_size = N,
+      R_values = R_values_B,
+      tolerance = tolerance,
+      n_simulations = n_simulations,
+      max_attempts = max_attempts,
+      try_gain = try_gain
+    )
   )
-
-  B <- simulate_outbreaks(
-    target_size = N,
-    R_values = R_values_B,
-    tolerance = tolerance,
-    n_simulations = n_simulations,
-    max_attempts = max_attempts,
-    try_gain = try_gain
-  )
-  return(list(A = A, B = B))
+  
+  saveRDS(sim, paste0("data/sims/sims_", i, ".rds"))
 }, .options = furrr_options(seed = 123))
-saveRDS(sims, file = "data/sims.rds")
 ```
 
-For the test to function correctly, we must compare outbreaks that have the same number of cases.
-
-```{r matching_pairs}
-# identify and store simulations with the same number of cases
+## Identify and save pairs of simulations
+The below will identify pairs of simulations (`A` and `B`) that have the same number of cases and will save them, for each epidemic size category.
+```{r}
+dir.create("data/pairs", recursive = TRUE, showWarnings = FALSE)
 future_walk(seq_along(epidemic_sizes), function(i) {
+  sim <- readRDS(paste0("data/sims/sims_", i, ".rds"))
   offset <- (i - 1) * n_simulations
-  matching_pairs(sims[[i]][["A"]], sims[[i]][["B"]], n = n_simulations) |>
+  
+  matching_pairs(sim[["A"]], sim[["B"]], n = n_simulations) |>
     iwalk(~ saveRDS(.x, paste0("data/pairs/pair_", offset + .y, ".rds")))
 }, .options = furrr_options(seed = 123))
+```
 
+
+# Metadata / parameter grid
+The below represents the complete parameter grid for our performance analysis.
+```{r matching_pairs}
 # save metadata
 metadata <-  expand.grid(
   pair_id = as.character(seq_along(list.files("data/pairs"))),
@@ -92,36 +104,51 @@ saveRDS(metadata, file = "data/metadata.rds")
 ```
 
 # Compare chains
-
 The code analyses pairs of simulated outbreaks with different transmission patterns: `A` includes superspreading events while `B` has no overdispersion. For each pair, it generates posterior transmission trees using `outbreaker2`. The resulting posterior chains (`chainA` and `chainB`) are compared using either `adonis` or `chi-square` tests, with parameters specified in `metadata`. Each test is repeated multiple times (`n_repeats`).
 
+## Build chains
+The below will apply `oubtreaker2` to obtain posterior distributions of transmission trees for `A` and `B`, respectively.
 ```{r compare_chains}
+dir.create("data/chains", recursive = TRUE, showWarnings = FALSE)
 future::plan("future::multisession", workers = future::availableCores() - 1)
-# Reconstruct the outbreak and produce chains
-chains <- future_map(unique(metadata$pair_id), function(id) {
-  pair <- readRDS(paste0(path, "/pairs/pair_", id, ".rds"))
+future_walk(unique(metadata$pair_id), function(id) {
+  pair <- readRDS(paste0("data/pairs/pair_", id, ".rds"))
   chains <- list(
     A = build_chain(pair[["A"]], ctd_fraction = 0.5),
     B = build_chain(pair[["B"]], ctd_fraction = 0.65)
   )
+  saveRDS(chains, paste0("data/chains/chain_", id, ".rds"))
 }, .options = furrr_options(seed = 123))
-names(chains) <- unique(metadata$pair_id)
 
-# Run tests
-p_values_adonis <- future_map(asplit(metadata, 1), function(param) {
-  chains <- chains[[param[["pair_id"]]]]
-  get_pval(
+```
+
+## Compute the p-values
+
+```{r}
+dir.create("data/p_values", recursive = TRUE, showWarnings = FALSE)
+
+# PERMANOVA (adonis)
+dir.create("data/p_values/adonis", recursive = TRUE, showWarnings = FALSE)
+future_walk(asplit(metadata, 1), function(param) {
+  chains <- readRDS(paste0("data/chains/chain_", param[["pair_id"]], ".rds"))
+  
+  p_value <- get_pval(
     chainA = chains$A,
     chainB = chains$B,
     overlap_freq = as.double(param[["overlap_freq"]]),
     sample_size = as.integer(param[["sample_size"]]),
     n_repeats = 100L
   )
+  
+  saveRDS(p_value, paste0("data/p_values/adonis/p_values_", param[["pair_id"]], ".rds"))
 }, .options = furrr_options(seed = 123))
 
-p_values_chisq <- future_map(asplit(metadata, 1), function(param) {
-  chains <- chains[[param[["pair_id"]]]]
-  get_pval(
+#Chisq test
+dir.create("data/p_values/chisq", recursive = TRUE, showWarnings = FALSE)
+future_walk(asplit(metadata, 1), function(param) {
+  chains <- readRDS(paste0("data/chains/chain_", param[["pair_id"]], ".rds"))
+  
+  p_value <- get_pval(
     chainA = chains$A,
     chainB = chains$B,
     overlap_freq = as.double(param[["overlap_freq"]]),
@@ -130,6 +157,8 @@ p_values_chisq <- future_map(asplit(metadata, 1), function(param) {
     method = "chisq",
     args = list(simulate.p.value = TRUE, B = 999)
   )
+  
+  saveRDS(p_value, paste0("data/p_values/chisq/p_values_", param[["pair_id"]], ".rds"))
 }, .options = furrr_options(seed = 123))
 ```
 
@@ -137,38 +166,41 @@ p_values_chisq <- future_map(asplit(metadata, 1), function(param) {
 ```{r load-metadata}
 metadata <- readRDS("data/metadata.rds")
 ```
+
 ## Adonis
 ```{r adonis-results}
-p_values <- readRDS("data/p_values_adonis.rds")
-adonis_results <- tibble::tibble(metadata, p_value = p_values) %>%
-  mutate(overlap_freq = as.factor(overlap_freq),
-         epidemic_size = as.factor(epidemic_size),
-         sample_size = as.factor(sample_size)) %>%
+adonis_results <- metadata %>%
+  mutate(
+    p_value = map(seq_len(n()), ~readRDS(paste0("data/p_values/adonis/p_values_", .x, ".rds"))),
+    overlap_freq = as.factor(overlap_freq),
+    epidemic_size = as.factor(epidemic_size),
+    sample_size = as.factor(sample_size)
+  ) %>%
   tidyr::unnest_longer(p_value, indices_to = "replicate")
 
 plot_props(adonis_results)
-```
-
-
-We can also check the ROC curves.
-
-``` {r adonis-roc}
-plot_roc(adonis_results)
+plot_roc(adonis_results,
+         group_vars = c("sample_size", "epidemic_size"),
+         facet_cols = "epidemic_size",
+         col_title = "Epidemic Size",
+         color_var = "sample_size")
 ```
 
 
 ## Chi-square
 ```{r xsq-results}
-p_values <- readRDS("data/p_values_chisq.rds")
-chi_results <- tibble::tibble(metadata, p_value = p_values) %>%
-  mutate(overlap_freq = as.factor(overlap_freq),
-         epidemic_size = as.factor(epidemic_size),
-         sample_size = as.factor(sample_size)) %>%
+chisq_results <- metadata %>%
+  mutate(
+    p_value = map(seq_len(n()), ~readRDS(paste0("data/p_values/chisq/p_values_", .x, ".rds"))),
+    overlap_freq = as.factor(overlap_freq),
+    epidemic_size = as.factor(epidemic_size),
+    sample_size = as.factor(sample_size)
+  ) %>%
   tidyr::unnest_longer(p_value, indices_to = "replicate")
 
-plot_props(chi_results)
+plot_props(chisq_results)
 
-plot_roc(chi_results,
+plot_roc(chisq_results,
          group_vars = c("sample_size", "epidemic_size"),
          facet_cols = "epidemic_size",
          col_title = "Epidemic Size",
@@ -182,7 +214,7 @@ plot_roc(chi_results,
 ```{r compare-methods}
 results <- bind_rows(
   adonis_results %>% mutate(method = "permanova"),
-  chi_results %>% mutate(method = "χ²"),
+  chisq_results %>% mutate(method = "χ²"),
 )
 roc_df <- get_roc(results,
                   group_vars = c("sample_size", "epidemic_size", "method"))

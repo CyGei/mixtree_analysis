@@ -1,37 +1,54 @@
-sims.rds
-Description: Outbreak simulation data for two scenarios (A and B).
-Structure: A list with length equal to the number of epidemic sizes.
-Each element contains 100 independent simulations for both scenarios A and B.
+Simulation Data
+
+data/sims/sims_*.rds
+
+List containing 100 independent outbreak simulations for both scenarios
+Each file corresponds to a specific epidemic size
+Structure per file: List of length 2 (A: superspreading, B: no overdispersion)
+
+----------------------------------------------
+Paired Data
+
+data/pairs/pair_*.rds
+
+Matched pairs of simulations with equal case numbers
+Structure per file: List of length 2 (A and B scenarios)
+Each scenario contains a dataframe with identical row counts
+
+----------------------------------------------
+Chain Data
+
+data/chains/chain_*.rds
+
+Posterior transmission trees for each simulation pair
+Structure per file: List of length 2 (A and B scenarios)
+Each element contains a posterior chain from outbreaker2
+
+----------------------------------------------
+P-values
+
+data/p_values/adonis/p_values_*.rds
+
+PERMANOVA test results comparing transmission trees
+One file per simulation pair
+Each file contains p-values for specified metadata parameters
 
 
-pairs/pair_*.rds
-Description: Matched pairs of outbreak simulations from scenarios A and B.
-Structure: A list of length 2 (one for each scenario) containing one simulation for A and B, respectively.
-Both dataframes have the same number of rows (cases).
+data/p_values/chisq/p_values_*.rds
 
-chains/chain_*.rds
-Description: Pairs of posterior transmission trees (A and B).
-Structure: Each is a list of length 2, containing a posterior chain for A and B.
+Chi-square test results comparing ancestry distributions
+One file per simulation pair
+Each file contains p-values for specified metadata parameters
 
-metadata.rds
-Description: Parameter grid defining test conditions for each simulation pair.
-Structure:
-pair_id: Unique identifier for each simulation pair.
+----------------------------------------------
+Metadata
 
-overlap_freq: Proportion of trees sampled from the same posterior distribution in both chains.
-0 = posterior samples are drawn from distinct posterior distribution.
-1 = posterior samples are drawn from the same posterior distribution
-X% = X% of posterior samples in each chain are drawn from the posterior distribution.
+data/metadata.rds
 
-sample_size: Number of posterior samples.
-epidemic_size: Size of the outbreak.
+Parameter grid for all test conditions
+Fields:
 
-p_value_adonis.rds
-Description: P-values from the adonis test, a permutation-based multivariate analysis of variance.
-Structure: A list of length nrow(metadata.rds).
-Each element contains a vector of p-values for the adonis test performed under the metadata parameters.
-
-p_value_chisq.rds
-Description: P-values from the chi-square test, comparing the frequency distribution of ancestries among cases.
-Structure: A list of length nrow(metadata.rds).
-Each element contains a vector of p-values for the chisq.test test performed under the metadata parameters.
+pair_id: Unique identifier for simulation pairs
+overlap_freq: Proportion [0-1] of shared posterior samples
+sample_size: Number of posterior samples drawn
+epidemic_size: Number of cases in the outbreak
