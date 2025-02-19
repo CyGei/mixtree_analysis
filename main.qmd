@@ -1,0 +1,197 @@
+---
+title: "Assess the performance of the `epitree` test"
+format:
+  html:
+    embed-resources: true
+    self-contained-math: true
+execute: 
+  warning: false
+  message: false
+---
+
+# Load libraries and helper functions
+
+```{r setup}
+source("R/packages.R")
+source("R/helpers.R")
+```
+
+# Grid parameters
+
+This analysis explores the test results for the following parameter combinations.
+
+```{r grid-parameters}
+sample_sizes <- c(20, 50, 100, 200) # posterior sample size
+overlap_freqs <- seq(0, 1, by = 0.2) # % of trees in the chain drawn from the same distribution
+epidemic_sizes <- c(20, 50, 100, 200) # number of nodes in the transmission tree
+```
+
+# Outbreak simulation
+
+We generate 2 outbreak scenarios:
+
+-   **Scenario A:** Superspreading (Negative Binomial: R=2, k=0.1)
+
+-   **Scenario B:** No overdispersion (Poisson: R=2)
+
+```{r simulation-parameters}
+R_values_A <- rnbinom(100, size = 0.1, mu = 2)
+R_values_B <- rpois(100, lambda = 2)
+tolerance <- 0.2 # Allow number of cases to deviate by 20% from the target size
+n_simulations <- 100
+max_attempts <- n_simulations * 100
+try_gain <- 0.7 # run the loop again if we reach 70% or more of the target n_simulations
+```
+
+```{r simulation-run}
+dir.create("data/sims", recursive = TRUE, showWarnings = FALSE)
+future::plan("future::multisession", workers = length(epidemic_sizes))
+sims <- future_map(epidemic_sizes, function(N) {
+  A <- simulate_outbreaks(
+    target_size = N,
+    R_values = R_values_A,
+    tolerance = tolerance,
+    n_simulations = n_simulations,
+    max_attempts = max_attempts,
+    try_gain = try_gain
+  )
+
+  B <- simulate_outbreaks(
+    target_size = N,
+    R_values = R_values_B,
+    tolerance = tolerance,
+    n_simulations = n_simulations,
+    max_attempts = max_attempts,
+    try_gain = try_gain
+  )
+  return(list(A = A, B = B))
+}, .options = furrr_options(seed = 123))
+saveRDS(sims, file = "data/sims.rds")
+```
+
+For the test to function correctly, we must compare outbreaks that have the same number of cases.
+
+```{r matching_pairs}
+# identify and store simulations with the same number of cases
+future_walk(seq_along(epidemic_sizes), function(i) {
+  offset <- (i - 1) * n_simulations
+  matching_pairs(sims[[i]][["A"]], sims[[i]][["B"]], n = n_simulations) |>
+    iwalk(~ saveRDS(.x, paste0("data/pairs/pair_", offset + .y, ".rds")))
+}, .options = furrr_options(seed = 123))
+
+# save metadata
+metadata <-  expand.grid(
+  pair_id = as.character(seq_along(list.files("data/pairs"))),
+  overlap_freq = overlap_freqs,
+  sample_size = sample_sizes,
+  stringsAsFactors = TRUE 
+) |> 
+  mutate(epidemic_size = rep(epidemic_sizes, each = n_simulations)[as.numeric(pair_id)])
+
+saveRDS(metadata, file = "data/metadata.rds")
+```
+
+# Compare chains
+
+The code analyses pairs of simulated outbreaks with different transmission patterns: `A` includes superspreading events while `B` has no overdispersion. For each pair, it generates posterior transmission trees using `outbreaker2`. The resulting posterior chains (`chainA` and `chainB`) are compared using either `adonis` or `chi-square` tests, with parameters specified in `metadata`. Each test is repeated multiple times (`n_repeats`).
+
+```{r compare_chains}
+future::plan("future::multisession", workers = future::availableCores() - 1)
+# Reconstruct the outbreak and produce chains
+chains <- future_map(unique(metadata$pair_id), function(id) {
+  pair <- readRDS(paste0(path, "/pairs/pair_", id, ".rds"))
+  chains <- list(
+    A = build_chain(pair[["A"]], ctd_fraction = 0.5),
+    B = build_chain(pair[["B"]], ctd_fraction = 0.65)
+  )
+}, .options = furrr_options(seed = 123))
+names(chains) <- unique(metadata$pair_id)
+
+# Run tests
+p_values_adonis <- future_map(asplit(metadata, 1), function(param) {
+  chains <- chains[[param[["pair_id"]]]]
+  get_pval(
+    chainA = chains$A,
+    chainB = chains$B,
+    overlap_freq = as.double(param[["overlap_freq"]]),
+    sample_size = as.integer(param[["sample_size"]]),
+    n_repeats = 100L
+  )
+}, .options = furrr_options(seed = 123))
+
+p_values_chisq <- future_map(asplit(metadata, 1), function(param) {
+  chains <- chains[[param[["pair_id"]]]]
+  get_pval(
+    chainA = chains$A,
+    chainB = chains$B,
+    overlap_freq = as.double(param[["overlap_freq"]]),
+    sample_size = as.integer(param[["sample_size"]]),
+    n_repeats = 100L,
+    method = "chisq",
+    args = list(simulate.p.value = TRUE, B = 999)
+  )
+}, .options = furrr_options(seed = 123))
+```
+
+# Results
+```{r load-metadata}
+metadata <- readRDS("data/metadata.rds")
+```
+## Adonis
+```{r adonis-results}
+p_values <- readRDS("data/p_values_adonis.rds")
+adonis_results <- tibble::tibble(metadata, p_value = p_values) %>%
+  mutate(overlap_freq = as.factor(overlap_freq),
+         epidemic_size = as.factor(epidemic_size),
+         sample_size = as.factor(sample_size)) %>%
+  tidyr::unnest_longer(p_value, indices_to = "replicate")
+
+plot_props(adonis_results)
+```
+
+
+We can also check the ROC curves.
+
+``` {r adonis-roc}
+plot_roc(adonis_results)
+```
+
+
+## Chi-square
+```{r xsq-results}
+p_values <- readRDS("data/p_values_chisq.rds")
+chi_results <- tibble::tibble(metadata, p_value = p_values) %>%
+  mutate(overlap_freq = as.factor(overlap_freq),
+         epidemic_size = as.factor(epidemic_size),
+         sample_size = as.factor(sample_size)) %>%
+  tidyr::unnest_longer(p_value, indices_to = "replicate")
+
+plot_props(chi_results)
+
+plot_roc(chi_results,
+         group_vars = c("sample_size", "epidemic_size"),
+         facet_cols = "epidemic_size",
+         col_title = "Epidemic Size",
+         color_var = "sample_size")
+
+```
+
+
+## Compare Methods
+
+```{r compare-methods}
+results <- bind_rows(
+  adonis_results %>% mutate(method = "permanova"),
+  chi_results %>% mutate(method = "χ²"),
+)
+roc_df <- get_roc(results,
+                  group_vars = c("sample_size", "epidemic_size", "method"))
+plot_roc(roc_df,
+         facet_rows = "method",
+         facet_cols = "epidemic_size",
+         row_title = "Method",
+         col_title = "Epidemic Size",
+         color_var = "sample_size",
+         color_palette = "Purples")
+
+```
