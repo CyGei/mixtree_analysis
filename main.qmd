@@ -70,7 +70,7 @@ future_walk(seq_along(epidemic_sizes), function(i) {
     )
   )
   
-  saveRDS(sim, paste0("data/sims/sims_", i, ".rds"))
+  save_safely(sim, paste0("data/sims/sims_", i, ".rds"))
 }, .options = furrr_options(seed = 123))
 ```
 
@@ -83,7 +83,7 @@ future_walk(seq_along(epidemic_sizes), function(i) {
   offset <- (i - 1) * n_simulations
   
   matching_pairs(sim[["A"]], sim[["B"]], n = n_simulations) |>
-    iwalk(~ saveRDS(.x, paste0("data/pairs/pair_", offset + .y, ".rds")))
+    iwalk(~ save_safely(.x, paste0("data/pairs/pair_", offset + .y, ".rds")))
 }, .options = furrr_options(seed = 123))
 ```
 
@@ -100,7 +100,7 @@ metadata <-  expand.grid(
 ) |> 
   mutate(epidemic_size = rep(epidemic_sizes, each = n_simulations)[as.numeric(pair_id)])
 
-saveRDS(metadata, file = "data/metadata.rds")
+save_safely(metadata, file = "data/metadata.rds")
 ```
 
 # Compare chains
@@ -117,7 +117,7 @@ future_walk(unique(metadata$pair_id), function(id) {
     A = build_chain(pair[["A"]], ctd_fraction = 0.5),
     B = build_chain(pair[["B"]], ctd_fraction = 0.65)
   )
-  saveRDS(chains, paste0("data/chains/chain_", id, ".rds"))
+  save_safely(chains, paste0("data/chains/chain_", id, ".rds"))
 }, .options = furrr_options(seed = 123))
 
 ```
@@ -140,7 +140,7 @@ future_walk(asplit(metadata, 1), function(param) {
     n_repeats = 100L
   )
   
-  saveRDS(p_value, paste0("data/p_values/adonis/p_values_", param[["pair_id"]], ".rds"))
+  save_safely(p_value, paste0("data/p_values/adonis/p_values_", param[["pair_id"]], ".rds"))
 }, .options = furrr_options(seed = 123))
 
 #Chisq test
@@ -158,7 +158,7 @@ future_walk(asplit(metadata, 1), function(param) {
     args = list(simulate.p.value = TRUE, B = 999)
   )
   
-  saveRDS(p_value, paste0("data/p_values/chisq/p_values_", param[["pair_id"]], ".rds"))
+  save_safely(p_value, paste0("data/p_values/chisq/p_values_", param[["pair_id"]], ".rds"))
 }, .options = furrr_options(seed = 123))
 ```
 
@@ -213,9 +213,10 @@ plot_roc(chisq_results,
 
 ```{r compare-methods}
 results <- bind_rows(
-  adonis_results %>% mutate(method = "permanova"),
-  chisq_results %>% mutate(method = "χ²"),
-)
+  adonis_results %>% mutate(method = "PERMANOVA"),
+  chisq_results %>% mutate(method = "χ² test")
+) |> mutate(method = factor(method, levels = c("χ² test", "PERMANOVA") ))
+
 roc_df <- get_roc(results,
                   group_vars = c("sample_size", "epidemic_size", "method"))
 plot_roc(roc_df,

@@ -370,7 +370,7 @@ plot_props <- function(results, alpha = 0.05) {
       label = label
     ),
     colour = "black",
-    size = 3) +
+    size = 2.5) +
     ggh4x::facet_nested(
       rows = vars(row_title, epidemic_size),
       cols = vars(col_title, sample_size),
@@ -384,7 +384,7 @@ plot_props <- function(results, alpha = 0.05) {
       )
     ) +
     scale_fill_manual(
-      values = c("reject" = "#CCCDC6", "accept" = "#49b56d"),
+      values = c("reject" = "#1b81bc", "accept" = "#E69F00"),#af245a
       #7d8af0 #82750f #0F8233
       breaks = c("reject", "accept"),
       name = "",
@@ -676,7 +676,13 @@ plot_roc <- function(df,
   return(p)
 }
 
-
+save_safely <- function(object, file) {
+  if (file.exists(file)) {
+    stop(paste("File", file, "already exists. Choose a different filename."))
+  } else {
+    saveRDS(object, file)
+  }
+}
 # plot_roc(rocs,
 #          facet_rows = "method",
 #          facet_cols = "epidemic_size",
