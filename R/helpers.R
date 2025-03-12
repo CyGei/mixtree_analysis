@@ -56,9 +56,11 @@ simulate_outbreaks <- function(target_size,
         )
         max_attempts <- max_attempts + 1000
       } else {
-        warning("Maximum number of attempts reached at ",
-                length(sims),
-                "simulations.")
+        warning(
+          "Maximum number of attempts reached at ",
+          length(sims),
+          "simulations."
+        )
         break
       }
     }
@@ -121,8 +123,9 @@ matching_pairs <- function(A, B, n = 100) {
   }
 
   # Check that each pair has the same number of rows
-  rows_match <- sapply(paired_list, function(pair)
-    nrow(pair$A) == nrow(pair$B))
+  rows_match <- sapply(paired_list, function(pair) {
+    nrow(pair$A) == nrow(pair$B)
+  })
   if (!all(rows_match)) {
     stop("Not all pairs have matching row counts.")
   }
@@ -226,57 +229,57 @@ run_outbreaker <- function(sim, ctd_fraction = 0.5) {
 }
 
 
-#' Build a Chain of Posterior Transmission Trees from a Simulation
+#' Build a forest of Posterior Transmission Trees from a Simulation
 #'
 #' Runs outbreaker2 on a simulation dataset, removes burn-in steps,
 #' extracts transmission trees, and processes them into a format suitable for use with
-#' `epitree::compare_chain`.
+#' `mixtree::tree_test()`.
 #'
 #' @param sim Data frame containing outbreak simulation data.
 #' @param ctd_fraction Numeric. Fraction of cases to sample for contact data. Default is 0.5.
 #' @param burnin Integer. Step threshold to remove burn-in samples. Default is 1000.
 #'
 #' @return A list of processed posterior transmission trees.
-build_chain <- function(sim,
-                        ctd_fraction = 0.5,
-                        burnin = 1000) {
-  chain <- run_outbreaker(sim, ctd_fraction = ctd_fraction)
-  chain <- chain[chain$step > burnin, ]
-  trees <- o2ools::get_trees(chain)
-  lapply(trees, epitree:::process_tree)
+build_forest <- function(sim,
+                         ctd_fraction = 0.5,
+                         burnin = 1000) {
+  forest <- run_outbreaker(sim, ctd_fraction = ctd_fraction)
+  forest <- forest[forest$step > burnin, ]
+  trees <- o2ools::get_trees(forest)
+  lapply(trees, mixtree:::process_tree)
 }
 
 
 # Perform the test  -------------------------------------------------
 
-#' Compute P-values from Resampled Chains
+#' Compute P-values from Resampled forests
 #'
-#' Draws resampled chains from two input chains (`chainA` and `chainB`) based on specified
-#' probabilities, then compares each resampled pair using `epitree::compare_chains` to
+#' Draws resampled forests from two input forests (`forestA` and `forestB`) based on specified
+#' probabilities, then compares each resampled pair using `mixtree::tree_test()` to
 #' compute p-values.
 #'
-#' @param chainA A vector or list representing the first chain.
-#' @param chainB A vector or list representing the second chain.
-#' @param overlap_freq Numeric. The probability weight for sampling from `chainA` in the mixed chain.
-#'   The weight for `chainB` is computed as (1 - overlap_freq).
+#' @param forestA A vector or list representing the first forest.
+#' @param forestB A vector or list representing the second forest.
+#' @param overlap_freq Numeric. The probability weight for sampling from `forestA` in the mixed forest.
+#'   The weight for `forestB` is computed as (1 - overlap_freq).
 #' @param sample_size Integer. The number of samples to draw per replicate.
 #' @param n_repeats Integer. The number of replicates to perform.
-#' @param method Character. The method to use for comparing chains. Default is "adonis", alternative is "chisq".
-#' @param args List. Additional arguments to pass to `epitree` functions.
+#' @param method Character. The method to use for comparing forests. Default is "permanova" (see `mixtree::tree_test()`).
+#' @param args List. Additional arguments to pass to `mixtree` functions.
 #'
 #' @return A numeric vector of p-values, one for each replicate.
 
-get_pval <- function(chainA,
-                     chainB,
+get_pval <- function(forestA,
+                     forestB,
                      overlap_freq,
                      sample_size,
                      n_repeats,
-                     method = "adonis",
-                     args = list()) {
+                     method = "permanova",
+                     test_args = list()) {
   # Probabilities
-  lenA <- length(chainA)
-  lenB <- length(chainB)
-  total_chain <- c(chainA, chainB)
+  lenA <- length(forestA)
+  lenB <- length(forestB)
+  total_forest <- c(forestA, forestB)
   total_len <- lenA + lenB
 
   pA <- overlap_freq
@@ -296,22 +299,14 @@ get_pval <- function(chainA,
   )
 
   ref_idx <- matrix(sample.int(lenA, size = sample_size * n_repeats, replace = TRUE),
-                    nrow = n_repeats)
-  if (method == "adonis") {
-    p_values <- vapply(seq_len(n_repeats), function(i) {
-      mixed_chain <- total_chain[mix_idx[i, ]]
-      reference_chain <- chainA[ref_idx[i, ]]
-      suppressWarnings(epitree::compare_chains(reference_chain, mixed_chain, adonis2_args = args)[, "Pr(>F)"][1])
-    }, numeric(1))
-  } else if (method == "chisq") {
-    p_values <- vapply(seq_len(n_repeats), function(i) {
-      mixed_chain <- total_chain[mix_idx[i, ]]
-      reference_chain <- chainA[ref_idx[i, ]]
-      suppressWarnings(epitree::get_chisq(reference_chain, mixed_chain, test_args = args)[["p.value"]])
-    }, numeric(1))
-  } else {
-    stop("Method not recognised")
-  }
+    nrow = n_repeats
+  )
+
+  p_values <- vapply(seq_len(n_repeats), function(i) {
+    mixed_forest <- total_forest[mix_idx[i, ]]
+    reference_forest <- forestA[ref_idx[i, ]]
+    suppressWarnings(mixtree::tree_test(reference_forest, mixed_forest, method = method, test_args = args)[, "Pr(>F)"][1])
+  }, numeric(1))
 
   return(p_values)
 }
@@ -346,8 +341,8 @@ plot_props <- function(results, alpha = 0.05) {
       # Create a label column with clear logic
       label = case_when(
         round(percentage, 1) == 100 ~ as.character(round(percentage, 1)),
-        round(percentage, 1) == 0   ~ "",
-        TRUE                        ~ as.character(round(percentage, 1))
+        round(percentage, 1) == 0 ~ "",
+        TRUE ~ as.character(round(percentage, 1))
       )
     )
 
@@ -360,17 +355,19 @@ plot_props <- function(results, alpha = 0.05) {
       color = "white",
       linewidth = 0.1
     ) +
-    geom_text(aes(
-      y = ifelse(
-        percentage == 100,
-        50,
-        # Center the label when percentage is 100%
-        ifelse(category == "reject", percentage / 2, 98.25 - percentage / 2)
+    geom_text(
+      aes(
+        y = ifelse(
+          percentage == 100,
+          50,
+          # Center the label when percentage is 100%
+          ifelse(category == "reject", percentage / 2, 98.25 - percentage / 2)
+        ),
+        label = label
       ),
-      label = label
-    ),
-    colour = "black",
-    size = 2.5) +
+      colour = "black",
+      size = 2.5
+    ) +
     ggh4x::facet_nested(
       rows = vars(row_title, epidemic_size),
       cols = vars(col_title, sample_size),
@@ -384,8 +381,8 @@ plot_props <- function(results, alpha = 0.05) {
       )
     ) +
     scale_fill_manual(
-      values = c("reject" = "#1b81bc", "accept" = "#E69F00"),#af245a
-      #7d8af0 #82750f #0F8233
+      values = c("reject" = "#1b81bc", "accept" = "#E69F00"), # af245a
+      # 7d8af0 #82750f #0F8233
       breaks = c("reject", "accept"),
       name = "",
       labels = c("reject" = "Reject H0", "accept" = "Accept H0")
@@ -406,13 +403,15 @@ plot_props <- function(results, alpha = 0.05) {
       panel.grid = element_blank()
       # panel.spacing = unit(0.25, "lines")
     ) +
-    guides(fill =
-             guide_legend(
-               keywidth = 5,
-               keyheight = 1,
-               label.position = "top",
-               label.vjust = -9.5
-             )) +
+    guides(
+      fill =
+        guide_legend(
+          keywidth = 5,
+          keyheight = 1,
+          label.position = "top",
+          label.vjust = -9.5
+        )
+    ) +
     labs(x = "Overlap Frequency", y = "Percentage")
 
   return(p)
@@ -425,8 +424,10 @@ plot_props <- function(results, alpha = 0.05) {
 get_roc <- function(data,
                     group_vars = c("sample_size", "epidemic_size")) {
   data %>%
-    mutate(overlap_freq = as.integer(as.character(overlap_freq)),
-           truth = if_else(overlap_freq < 1, 1, 0)) %>%
+    mutate(
+      overlap_freq = as.integer(as.character(overlap_freq)),
+      truth = if_else(overlap_freq < 1, 1, 0)
+    ) %>%
     group_by(across(all_of(group_vars))) %>%
     group_modify(~ {
       roc_obj <- pROC::roc(
@@ -454,7 +455,6 @@ get_roc <- function(data,
         AUC = as.numeric(pROC::auc(roc_obj)),
         best_alpha = roc_coords$threshold == best_alpha_value
       )
-
     }) %>%
     ungroup()
 }
@@ -475,23 +475,22 @@ plot_roc <- function(df,
                      subtitle = NULL,
                      x_label = "1 - Specificity",
                      y_label = "Sensitivity") {
-
   # Get ROC data if raw results are provided
-  if("AUC" %in% names(df)) {
+  if ("AUC" %in% names(df)) {
     x <- df
   } else {
-    if(is.null(group_vars)) {
+    if (is.null(group_vars)) {
       stop("If providing raw results, you must specify group_vars")
     }
     x <- get_roc(df, group_vars = group_vars)
   }
 
   # Set up facet variables
-  if(!is.null(row_title) && !is.null(facet_rows)) {
+  if (!is.null(row_title) && !is.null(facet_rows)) {
     x <- x %>% mutate(row_title = row_title)
   }
 
-  if(!is.null(col_title) && !is.null(facet_cols)) {
+  if (!is.null(col_title) && !is.null(facet_cols)) {
     x <- x %>% mutate(col_title = col_title)
   }
 
@@ -499,7 +498,7 @@ plot_roc <- function(df,
   points_df_list <- list()
 
   # Add points for specified alpha values
-  for(a in alpha_values) {
+  for (a in alpha_values) {
     points_df_list[[paste0("Alpha = ", a)]] <- x %>%
       group_by_at(vars(one_of(c(color_var, facet_rows, facet_cols)))) %>%
       slice_min(abs(alpha - a)) %>%
@@ -516,19 +515,19 @@ plot_roc <- function(df,
 
   # Create annotations
   group_vars_for_annotation <- c()
-  if(!is.null(col_title) && !is.null(facet_cols)) {
+  if (!is.null(col_title) && !is.null(facet_cols)) {
     group_vars_for_annotation <- c(group_vars_for_annotation, "col_title", facet_cols)
-  } else if(!is.null(facet_cols)) {
+  } else if (!is.null(facet_cols)) {
     group_vars_for_annotation <- c(group_vars_for_annotation, facet_cols)
   }
 
-  if(!is.null(row_title) && !is.null(facet_rows)) {
+  if (!is.null(row_title) && !is.null(facet_rows)) {
     group_vars_for_annotation <- c(group_vars_for_annotation, "row_title", facet_rows)
-  } else if(!is.null(facet_rows)) {
+  } else if (!is.null(facet_rows)) {
     group_vars_for_annotation <- c(group_vars_for_annotation, facet_rows)
   }
 
-  if(length(group_vars_for_annotation) == 0) {
+  if (length(group_vars_for_annotation) == 0) {
     group_vars_for_annotation <- color_var
   }
 
@@ -550,8 +549,8 @@ plot_roc <- function(df,
 
   # Prepare faceting formula
   facet_formula <- NULL
-  if(!is.null(facet_rows) && !is.null(facet_cols)) {
-    if(!is.null(row_title) && !is.null(col_title)) {
+  if (!is.null(facet_rows) && !is.null(facet_cols)) {
+    if (!is.null(row_title) && !is.null(col_title)) {
       facet_formula <- ggh4x::facet_nested(
         rows = vars(row_title, !!!syms(facet_rows)),
         cols = vars(col_title, !!!syms(facet_cols)),
@@ -566,8 +565,8 @@ plot_roc <- function(df,
         space = "fixed"
       )
     }
-  } else if(!is.null(facet_rows)) {
-    if(!is.null(row_title)) {
+  } else if (!is.null(facet_rows)) {
+    if (!is.null(row_title)) {
       facet_formula <- ggh4x::facet_nested(
         rows = vars(row_title, !!!syms(facet_rows)),
         scales = "fixed",
@@ -580,8 +579,8 @@ plot_roc <- function(df,
         space = "fixed"
       )
     }
-  } else if(!is.null(facet_cols)) {
-    if(!is.null(col_title)) {
+  } else if (!is.null(facet_cols)) {
+    if (!is.null(col_title)) {
       facet_formula <- ggh4x::facet_nested(
         cols = vars(col_title, !!!syms(facet_cols)),
         scales = "fixed",
@@ -599,7 +598,7 @@ plot_roc <- function(df,
   # Build plot
   p <- ggplot()
 
-  if(!is.null(facet_formula)) {
+  if (!is.null(facet_formula)) {
     p <- p + facet_formula
   }
 
