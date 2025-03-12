@@ -1,5 +1,5 @@
 ---
-title: "Assess the performance of the `epitree` test"
+title: "Assess the performance of mixtree methods"
 format:
   html:
     embed-resources: true
@@ -10,6 +10,11 @@ execute:
 ---
 
 # Load libraries and helper functions
+```{r mixtree, message=FALSE, warning=FALSE}
+#install.packages("mixtree")
+library(mixtree)
+```
+
 ```{r setup}
 source("R/packages.R")
 source("R/helpers.R")
@@ -21,9 +26,9 @@ dir.create("data", recursive = TRUE, showWarnings = FALSE)
 This analysis explores the test results for the following parameter combinations.
 
 ```{r grid-parameters}
-sample_sizes <- c(20, 50, 100, 200) # posterior sample size
-overlap_freqs <- seq(0, 1, by = 0.2) # % of trees in the chain drawn from the same distribution
-epidemic_sizes <- c(20, 50, 100, 200) # number of nodes in the transmission tree
+sample_sizes <- c(20, 50, 100, 200) # posterior sample size (i.e. forest size)
+overlap_freqs <- seq(0, 1, by = 0.2) # % of trees in the forest drawn from the same distribution
+epidemic_sizes <- c(20, 50, 100, 200) # number of vertices in the transmission tree
 ```
 
 # Outbreak simulation
@@ -104,20 +109,20 @@ save_safely(metadata, file = "data/metadata.rds")
 ```
 
 # Compare chains
-The code analyses pairs of simulated outbreaks with different transmission patterns: `A` includes superspreading events while `B` has no overdispersion. For each pair, it generates posterior transmission trees using `outbreaker2`. The resulting posterior chains (`chainA` and `chainB`) are compared using either `adonis` or `chi-square` tests, with parameters specified in `metadata`. Each test is repeated multiple times (`n_repeats`).
+The code analyses pairs of simulated outbreaks with different transmission patterns: `A` includes superspreading events while `B` has no overdispersion. For each pair, it generates posterior transmission trees using `outbreaker2`. The resulting forests (`forestA` and `forestB`) are compared using either `adonis` or `chi-square` tests, with parameters specified in `metadata`. Each test is repeated multiple times (`n_repeats`).
 
 ## Build chains
 The below will apply `oubtreaker2` to obtain posterior distributions of transmission trees for `A` and `B`, respectively.
-```{r compare_chains}
-dir.create("data/chains", recursive = TRUE, showWarnings = FALSE)
+```{r build_forests}
+dir.create("data/forests", recursive = TRUE, showWarnings = FALSE)
 future::plan("future::multisession", workers = future::availableCores() - 1)
 future_walk(unique(metadata$pair_id), function(id) {
   pair <- readRDS(paste0("data/pairs/pair_", id, ".rds"))
-  chains <- list(
-    A = build_chain(pair[["A"]], ctd_fraction = 0.5),
-    B = build_chain(pair[["B"]], ctd_fraction = 0.65)
+  forests <- list(
+    A = build_forest(pair[["A"]], ctd_fraction = 0.5),
+    B = build_forest(pair[["B"]], ctd_fraction = 0.65)
   )
-  save_safely(chains, paste0("data/chains/chain_", id, ".rds"))
+  save_safely(forests, paste0("data/forests/forest_", id, ".rds"))
 }, .options = furrr_options(seed = 123))
 
 ```
@@ -130,11 +135,11 @@ dir.create("data/p_values", recursive = TRUE, showWarnings = FALSE)
 # PERMANOVA (adonis)
 dir.create("data/p_values/adonis", recursive = TRUE, showWarnings = FALSE)
 future_walk(asplit(metadata, 1), function(param) {
-  chains <- readRDS(paste0("data/chains/chain_", param[["pair_id"]], ".rds"))
+  forests <- readRDS(paste0("data/forests/forest_", param[["pair_id"]], ".rds"))
   
   p_value <- get_pval(
-    chainA = chains$A,
-    chainB = chains$B,
+    forestA = forests$A,
+    forestB = forests$B,
     overlap_freq = as.double(param[["overlap_freq"]]),
     sample_size = as.integer(param[["sample_size"]]),
     n_repeats = 100L
@@ -149,8 +154,8 @@ future_walk(asplit(metadata, 1), function(param) {
   chains <- readRDS(paste0("data/chains/chain_", param[["pair_id"]], ".rds"))
   
   p_value <- get_pval(
-    chainA = chains$A,
-    chainB = chains$B,
+    forestA = forests$A,
+    forestB = forests$B,
     overlap_freq = as.double(param[["overlap_freq"]]),
     sample_size = as.integer(param[["sample_size"]]),
     n_repeats = 100L,
