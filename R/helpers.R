@@ -1,161 +1,3 @@
-# Outbreak Simulation -----------------------------------------------------
-#' Simulate outbreaks within a target size range
-#'
-#' This function repeatedly simulates outbreaks until a specified number of simulations
-#' is obtained, ensuring each simulation's outbreak size falls within a tolerance range around
-#' a target size.
-#'
-#' @param target_size Integer. The target outbreak size.
-#' @param R_values Integer vector. Reproduction number(s) used in the simulation.
-#' @param tolerance Numeric. Tolerance for outbreak size (default is 0.2 for ±20% of target size).
-#' @param n_simulations Integer. Number of valid simulations to generate (default is 200).
-#' @param max_attempts Integer. Maximum number of simulation attempts before checking progress (default is 1000).
-#' @param try_gain Numeric. Fraction of target simulations required to extend max_attempts (default is 1, i.e. no extension).
-#'
-#' @return A list of outbreak simulations (data frames) whose sizes are within
-#'   \code{target_size * (1 - tolerance)} and \code{target_size * (1 + tolerance)}.
-#'
-#' @details The function simulates outbreaks using \code{simulacr::simulate_outbreak} until
-#'   \code{n_simulations} valid simulations are collected. If the number of attempts reaches
-#'   \code{max_attempts} and at least \code{try_gain * n_simulations} simulations have been obtained,
-#'   an additional 1000 attempts are added automatically; otherwise, the function issues a warning.
-#'
-#' @examples
-#' \dontrun{
-#' # Simulate 100 outbreaks targeting 50 cases ±20% using negative binomial R_values.
-#' sims <- simulate_outbreaks(
-#'   target_size = 50,
-#'   R_values = rnbinom(100, size = 0.2, mu = 3),
-#'   tolerance = 0.2,
-#'   n_simulations = 100,
-#'   max_attempts = 1000,
-#'   try_gain = 0.8
-#' )
-#' }
-#'
-simulate_outbreaks <- function(target_size,
-                               R_values,
-                               tolerance = 0.2,
-                               n_simulations = 200,
-                               max_attempts = 1000,
-                               try_gain = 1) {
-  # Calculate acceptable size range
-  min_size <- round(target_size * (1 - tolerance))
-  max_size <- round(target_size * (1 + tolerance))
-  sims <- list()
-  attempts <- 0
-
-  while (length(sims) < n_simulations) {
-    # Check if current max_attempts limit is reached
-    if (attempts >= max_attempts) {
-      if (length(sims) >= try_gain * n_simulations) {
-        message(
-          "Reached ",
-          try_gain * 100,
-          "% of target simulations. Adding an additional 1000 attempts."
-        )
-        max_attempts <- max_attempts + 1000
-      } else {
-        warning(
-          "Maximum number of attempts reached at ",
-          length(sims),
-          "simulations."
-        )
-        break
-      }
-    }
-
-    sim <- simulacr::simulate_outbreak(
-      duration = 100,
-      population_size = round(target_size / epitrix::R02AR(mean(R_values))),
-      R_values = R_values,
-      dist_incubation = outbreaker2::fake_outbreak$w,
-      dist_generation_time = outbreaker2::fake_outbreak$w
-    )$data %>%
-      relabel_tree(id_cols = c("id", "source"), date_col = "date_onset")
-    sim <- shift_init_date(sim)
-
-    attempts <- attempts + 1
-
-    # Accept simulation if within acceptable size range
-    if (nrow(sim) >= min_size && nrow(sim) <= max_size) {
-      sims[[length(sims) + 1]] <- sim
-    }
-  }
-
-  return(sims)
-}
-
-
-# Process Simulations -----------------------------------------------------
-#' @title Match data frames by row counts
-#'
-#' @description Matches and pairs data frames from lists \code{A} and \code{B} based on identical row counts.
-#'
-#' @param A A list of data frames.
-#' @param B A list of data frames.
-#' @param n Number of pairs to return.
-#'
-#' @return A list of length \code{n}, each element containing a pair of data frames with the same number of rows.
-matching_pairs <- function(A, B, n = 100) {
-  nrows_A <- sapply(A, nrow)
-  nrows_B <- sapply(B, nrow)
-
-  dfA <- data.frame(index_A = seq_along(A), nrows = nrows_A)
-  dfB <- data.frame(index_B = seq_along(B), nrows = nrows_B)
-
-  merged_df <- merge(dfA, dfB, by = "nrows")
-
-  # keep unique index from A @ASK if necessary
-  # merged_df <- merged_df[!duplicated(merged_df$index_A), ]
-
-
-  if (nrow(merged_df) > n) {
-    merged_df <- merged_df[sample(1:nrow(merged_df), n), ]
-  }
-
-  paired_list <- mapply(function(a_idx, b_idx) {
-    list(A = A[[a_idx]], B = B[[b_idx]])
-  }, merged_df$index_A, merged_df$index_B, SIMPLIFY = FALSE)
-
-  if (length(paired_list) < n) {
-    stop("Not enough matching pairs found to create ", n, "pairs.")
-  }
-
-  # Check that each pair has the same number of rows
-  rows_match <- sapply(paired_list, function(pair) {
-    nrow(pair$A) == nrow(pair$B)
-  })
-  if (!all(rows_match)) {
-    stop("Not all pairs have matching row counts.")
-  }
-
-  return(paired_list)
-}
-
-
-#' Shift Duplicate Earliest Dates
-#'
-#' Shifts onset dates that are equal to the earliest date (except the first occurrence) by a specified value.
-#'
-#' @param sim Data frame containing simulation data.
-#' @param date_col Character. Name of the column with onset dates. Default is "date_onset".
-#' @param shift Numeric. Value to add to duplicate earliest dates. Default is 1.
-#'
-#' @return Data frame with updated onset dates.
-shift_init_date <- function(sim,
-                            date_col = "date_onset",
-                            shift = 1) {
-  dates <- sim[[date_col]]
-  min_date <- min(dates, na.rm = TRUE)
-  idx <- which(dates == min_date)
-  # Shift all but the first occurrence
-  if (length(idx) > 1) {
-    sim[[date_col]][idx[-1]] <- sim[[date_col]][idx[-1]] + shift
-  }
-  return(sim)
-}
-
 #' Relabel IDs by Onset Date Order
 #'
 #' Reorders and relabels IDs based on the corresponding onset dates.
@@ -176,11 +18,11 @@ label_ids <- function(id, date) {
 #'
 #' @param df Data frame containing outbreak data.
 #' @param id_cols Character vector of column names to be relabelled.
-#' @param date_col Character. Name of the column with onset dates. Default is "date_onset".
+#' @param date_col Character. Name of the column with onset dates. Default is "date".
 #'
 #' @return Data frame with relabelled ID columns.
-relabel_tree <- function(df, id_cols, date_col = "date_onset") {
-  ids <- label_ids(df[[id_cols[1]]], df[[date_col]]) # Use the first column for labelling
+relabel_tree <- function(df, id_cols, date_col = "date") {
+  ids <- label_ids(df[[id_cols[2]]], df[[date_col]]) # Use the 2nd column for labelling
 
   # Apply the relabelling all specified id columns
   for (col in id_cols) {
@@ -190,63 +32,96 @@ relabel_tree <- function(df, id_cols, date_col = "date_onset") {
   return(df)
 }
 
+# set epi parameters -------------------------------------------------
+set_epi_params <- function(off_R, off_k, gt_mu, gt_sd) {
+  offspring_dist <- rnbinom(n = 1e4, size = off_k, mu = off_R)
 
-# Outbreak Reconstruction -------------------------------------------------
-#' Run Outbreaker2 on Simulation Data
-#'
-#' Executes the outbreaker2 algorithm on a simulation data frame, utilising additional contact data.
-#'
-#' @param sim Data frame containing outbreak simulation data.
-#' @param ctd_fraction Numeric. Fraction of cases to sample for contact data. Default is 0.5.
-#'
-#' @return An outbreaker2 object containing the reconstructed outbreak.
-run_outbreaker <- function(sim, ctd_fraction = 0.5) {
-  n_cases <- nrow(sim)
-  # Adding ctd data to improve reconstruction
-  ctd_sample <- sample(2:n_cases, round(n_cases * ctd_fraction))
-
-  config <- outbreaker2::create_config(
-    init_tree = "star",
-    move_mu = FALSE,
-    init_pi = 1,
-    move_pi = FALSE,
-    init_kappa = 1,
-    move_kappa = FALSE,
-    find_import = FALSE
+  gt_cv <- gt_sd / gt_mu
+  gt_params <- epitrix::gamma_mucv2shapescale(mu = gt_mu, cv = gt_cv)
+  generation_time <- distcrete::distcrete(
+    name = "gamma",
+    shape = gt_params$shape,
+    scale = gt_params$scale,
+    interval = 1
   )
 
-  data <- outbreaker2::outbreaker_data(
-    dates = sim$date_onset,
-    w_dens = outbreaker2::fake_outbreak$w,
-    f_dens = outbreaker2::fake_outbreak$w,
-    ctd = sim[ctd_sample, c("source", "id")],
-    ids = sim$id
+  list(
+    offspring_dist = offspring_dist,
+    generation_time = generation_time
   )
-
-  out <- outbreaker2::outbreaker(data = data, config = config)
-  out <- o2ools::identify(out, sim$id)
-  return(out)
 }
 
+# build the true transmission tree -------------------------------------------------
 
-#' Build a forest of Posterior Transmission Trees from a Simulation
-#'
-#' Runs outbreaker2 on a simulation dataset, removes burn-in steps,
-#' extracts transmission trees, and processes them into a format suitable for use with
-#' `mixtree::tree_test()`.
-#'
-#' @param sim Data frame containing outbreak simulation data.
-#' @param ctd_fraction Numeric. Fraction of cases to sample for contact data. Default is 0.5.
-#' @param burnin Integer. Step threshold to remove burn-in samples. Default is 1000.
-#'
-#' @return A list of processed posterior transmission trees.
-build_forest <- function(sim,
-                         ctd_fraction = 0.5,
-                         burnin = 1000) {
-  forest <- run_outbreaker(sim, ctd_fraction = ctd_fraction)
-  forest <- forest[forest$step > burnin, ]
-  trees <- o2ools::get_trees(forest)
-  lapply(trees, mixtree:::process_tree)
+build_tree <- function(off_R, off_k, gt_mu, gt_sd, duration = 365L, population = 100L) {
+  params <- set_epi_params(off_R, off_k, gt_mu, gt_sd)
+
+  target_AR <- R02AR(off_R)
+
+  repeat {
+    out <- simulacr::simulate_outbreak(
+      duration = duration,
+      population_size = population,
+      R_values = params$offspring_dist,
+      dist_generation_time = params$generation_time$d(0:100),
+      dist_incubation = 1L
+    )
+
+    AR <- nrow(out$data) / population
+    if (AR >= target_AR) break
+  }
+
+  true_tree <- out$data |>
+    transmute(
+      j = source,
+      i = id,
+      date = date_infection
+    ) |>
+    relabel_tree(id_cols = c("j", "i"), date = "date") |>
+    as_tibble()
+
+  return(true_tree)
+}
+
+# build the epidemic forest -------------------------------------------------
+build_forest <- function(true_tree, off_R, off_k, gt_mu, gt_sd, n_trees) {
+  params <- set_epi_params(off_R, off_k, gt_mu, gt_sd)
+
+  simulate_tree <- function() {
+    sim_tree <- true_tree |>
+      mutate(
+        j = NA_character_,
+        R = sample(params$offspring_dist, n(), replace = TRUE),
+        R = if_else(
+          i == "1" & R < 1,
+          sample(params$offspring_dist[params$offspring_dist != 0], 1L),
+          R
+        )
+      )
+
+    for (row in 2:nrow(sim_tree)) {
+      i <- sim_tree$i[row]
+      t_i <- sim_tree$date[row]
+
+      j_candidates <- sim_tree |>
+        filter(date < t_i) |>
+        mutate(foi = R * params$generation_time$d(t_i - date)) |>
+        filter(foi > 0)
+
+      if (nrow(j_candidates) == 0) next
+
+      j_chosen <- sample(j_candidates$i, 1, prob = j_candidates$foi / sum(j_candidates$foi))
+      sim_tree$j[row] <- j_chosen
+    }
+    # safety checks
+    stopifnot(sum(is.na(sim_tree$j)) == 1)
+    sim_tree <- sim_tree |> slice(-1) |> rename(from = j, to = i)
+
+    return(sim_tree)
+  }
+
+  sim_trees <- replicate(n_trees, simulate_tree(), simplify = FALSE)
+  return(sim_trees)
 }
 
 
