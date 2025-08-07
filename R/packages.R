@@ -8,10 +8,12 @@ pacman::p_load(
   tidyverse,
   scales,
   epitrix,
+  purrr,
   furrr,
   pROC,
   ggh4x,
-  colorspace
+  colorspace,
+  LaplacesDemon
 )
 pacman::p_load_gh("CyGei/simulacr") # to simulate outbreaks
 pacman::p_load_gh("CyGei/o2ools") #helper functions for outbreaker2
