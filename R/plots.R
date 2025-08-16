@@ -221,13 +221,13 @@ ggplot2::ggsave(
 
 results %>%
   mutate(
-    actual_positive  = overlap_freq != "1",
+    actual_positive = overlap_freq != "1",
     predicted_positive = p_value < alpha
   ) %>%
   group_by(method, epidemic_size, sample_size) %>%
   summarise(
-    precision = sum(predicted_positive & actual_positive ) / sum(predicted_positive),
-    recall = sum(predicted_positive & actual_positive ) / sum(actual_positive),
+    precision = sum(predicted_positive & actual_positive) / sum(predicted_positive),
+    recall = sum(predicted_positive & actual_positive) / sum(actual_positive),
     .groups = "drop"
   ) %>%
   ggplot(aes(x = recall, y = precision, group = interaction(epidemic_size, method))) +
@@ -261,10 +261,10 @@ results %>%
     fill = "Forest Size:"
   )
 
-  ggplot2::ggsave(
-    "pr_curve.png",
-    width = 120,
-    height = 100,
-    units = "mm",
-    dpi = 300
-  )
+ggplot2::ggsave(
+  "pr_curve.png",
+  width = 120,
+  height = 100,
+  units = "mm",
+  dpi = 300
+)

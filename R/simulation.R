@@ -8,8 +8,11 @@ set.seed(000)
 # =================================================
 # Configuration
 # =================================================
+
+# -------------------------------------------------
 # Parameters for outbreak simulations
-config <- list(
+# -------------------------------------------------
+sim_config <- list(
   off_R = c(1.5, 2, 2.5, 3, 5),
   off_k = c(0.1, 0.3, 1, 10, 1e5),
   gt_mu = 3,
@@ -17,6 +20,41 @@ config <- list(
   epidemic_size = c(20, 50, 100, 200),
   duration = 365
 )
+# Number of unique outbreak simulations
+# Represents all distinct combinations of the varying outbreak parameters
+n_sims <- map_int(sim_config, length) |> prod()
+cat("Number of outbreak simulations:", n_sims, "\n")
+
+# -------------------------------------------------
+# Number of unique test conditions
+# -------------------------------------------------
+test_config <- list(
+  method = c("permanova", "chisq"),
+  sample_size = c(20, 50, 100, 200)
+)
+# Represents the number of different test conditions applied to each comparison pair
+n_tests <- map_int(test_config, length) |> prod()
+cat("Number of test conditions:", n_tests, "\n")
+
+# -------------------------------------------------
+# Number of comparison pairs
+# -------------------------------------------------
+# Total number of pairwise comparisons between outbreak simulations,
+# including self-comparisons but counting each pair only once
+# (e.g. keep A vs B, ignore not B vs A)
+n_pairs <- with(
+  sim_config,
+  rep(length(off_R) * length(off_k), times = length(epidemic_size))
+) |>
+  map_dbl(~ .x * (.x + 1) / 2) |>
+  sum()
+cat("Number of forests to compare:", n_pairs, "\n")
+
+# -------------------------------------------------
+# Number of tests performed
+# -------------------------------------------------
+# Total number of tests across all pairs and test conditions
+cat("Total number of tests to perform:", n_pairs * n_tests, "\n")
 
 # =================================================
 # Outbreak simulation
@@ -25,7 +63,7 @@ config <- list(
 
 plan(multisession, workers = availableCores() - 2)
 
-tree_grid <- config |>
+tree_grid <- sim_config |>
   expand.grid(stringsAsFactors = FALSE) |>
   as_tibble() |>
   mutate(id = row_number()) |>
@@ -35,7 +73,7 @@ tree_grid <- config |>
       .options = furrr_options(seed = TRUE)
     )
   ) |>
-  log_time("tree_grid")
+  time_pipe("tree_grid", log_file = "time.log")
 
 saveRDS(tree_grid, "data/tree_grid.rds")
 
@@ -50,7 +88,7 @@ forest_grid <- tree_grid |>
       .options = furrr_options(seed = TRUE)
     )
   ) |>
-  log_time("forest_grid")
+  time_pipe("forest_grid", log_file = "time.log")
 
 saveRDS(forest_grid, "data/forest_grid.rds")
 
@@ -64,24 +102,15 @@ test_grid <- forest_grid |>
   (\(df) inner_join(df, df, suffix = c("_A", "_B"), by = "epidemic_size", relationship = "many-to-many"))() |>
   # Keep pairs where id_A <= id_B to avoid duplicates/reversals
   filter(id_A <= id_B) |>
-  crossing(sample_size = c(20, 50, 100, 200)) |>
+  crossing(sample_size = test_config$sample_size, method = test_config$method) |>
   mutate(
     p_value = future_pmap_dbl(
-      .l = list(id_A, id_B, sample_size),
-      .f = function(id_A, id_B, sample_size) {
-        suppressWarnings(
-          mixtree::tree_test(
-            sample(forest_grid$forest[[id_A]], sample_size),
-            sample(forest_grid$forest[[id_B]], sample_size),
-            method = "permanova",
-            test_args = list(permuations = 200)
-          )$`Pr(>F)` |> pluck(1)
-        )
-      },
+      .l = list(id_A, id_B, sample_size, method),
+      .f = mixtree_test,
       .options = furrr_options(seed = TRUE)
     )
   ) |>
-  log_time("mixtree")
+  time_pipe("test_grid", log_file = "time.log")
 
 saveRDS(test_grid, "data/test_grid.rds")
 test_grid <- readRDS("data/test_grid.rds")
@@ -89,106 +118,11 @@ test_grid <- readRDS("data/test_grid.rds")
 # =================================================
 # Plot Grid
 # =================================================
-library(ggh4x)
-
-test_grid |>
-  filter(sample_size == 100) |>
-  mutate(significance = if_else(p_value < 0.05, "Significant", "Non-significant")) |>
-  ggplot(aes(x = factor(off_k_A), y = factor(off_k_B), fill = significance)) +
-  geom_tile(color = "white", linewidth = 0.5) +
-  geom_segment(
-    data = test_grid |> filter(off_k_A == off_k_B, off_R_A == off_R_B),
-    aes(
-      x = as.numeric(factor(off_k_A)) - 0.5,
-      y = as.numeric(factor(off_k_B)) - 0.5,
-      xend = as.numeric(factor(off_k_A)) + 0.5,
-      yend = as.numeric(factor(off_k_B)) + 0.5
-    ),
-    color = "black",
-    linewidth = 0.25,
-    inherit.aes = FALSE
-  ) +
-  facet_nested(
-    rows = vars(factor(off_R_A, levels = sort(unique(test_grid$off_R_A), decreasing = TRUE))),
-    cols = vars(factor(epidemic_size), factor(off_R_B)),
-    nest_line = element_line(linetype = 1),
-    labeller = labeller(
-      .rows = function(x) {
-        vals <- sort(unique(test_grid$off_R_A), decreasing = TRUE)
-        ifelse(x == vals[1], paste0("R0 = ", x), as.character(x))
-      },
-      .cols = function(x) {
-        vals <- sort(unique(test_grid$epidemic_size))
-        ifelse(x == vals[1], paste0("Epidemic size = ", x), as.character(x))
-      }
-    )
-  ) +
-  scale_fill_manual(values = c(
-    "Significant" = "#f99820",
-    "Non-significant" = "#03658c"
-  )) +
-  labs(
-    x = "k (Forest A)",
-    y = "k (Forest B)",
-    fill = "Difference"
-  ) +
-  theme_light(base_size = 11) +
-  theme(
-    legend.position = "bottom",
-    strip.placement = "outside",
-    panel.spacing = unit(1, "mm"), # reduce spacing between panels
-    strip.switch.pad.grid = unit(0, "pt"), # remove extra padding
-    strip.switch.pad.wrap = unit(0, "pt"),
-    strip.background = element_blank(),
-    strip.text = element_text(color = "black"),
-    axis.text.x = element_blank()
-  )
-
+source("R/plot.test_grid.R")
+plot.test_grid()
 
 
 # =================================================
 # Plot ROC
 # =================================================
-# Define multiple alpha thresholds
-alpha_values <- seq(0, 1, 0.01)
-
-# Compute performance metrics for each alpha
-perf_grid_alpha <- expand_grid(test_grid, alpha = alpha_values) %>%
-  mutate(
-    true_diff = (off_R_A != off_R_B) | (off_k_A != off_k_B),
-    test_reject = p_value < alpha
-  ) %>%
-  group_by(epidemic_size, sample_size, alpha) %>%
-  summarise(
-    TP = sum(true_diff & test_reject),
-    FN = sum(true_diff & !test_reject),
-    TN = sum(!true_diff & !test_reject),
-    FP = sum(!true_diff & test_reject),
-    sensitivity = TP / (TP + FN),
-    specificity = TN / (TN + FP),
-    .groups = "drop"
-  ) %>%
-  mutate(fpr = 1 - specificity)
-
-ggplot(perf_grid_alpha, aes(x = fpr, y = sensitivity, group = interaction(epidemic_size, sample_size))) +
-  geom_line(aes(color = factor(sample_size))) +
-  facet_wrap(~epidemic_size) +
-  labs(
-    x = "1 - Specificity",
-    y = "Sensitivity",
-    color = "Sample Size"
-  ) +
-  theme(
-    legend.position = "bottom",
-    legend.box = "vertical",
-    legend.margin = margin(t = -5),
-    legend.box.just = "left",
-    legend.spacing = unit(0.1, "cm"),
-    strip.background = element_rect(
-      fill = "#f8f4f2",
-      colour = "black",
-      linewidth = 0.5
-    ),
-    panel.grid = element_blank(),
-    panel.spacing = unit(0.3, "lines")
-  )
+plot.ROC()

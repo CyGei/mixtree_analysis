@@ -37,57 +37,6 @@ relabel_tree <- function(df, id_cols, date_col = "date") {
   return(df)
 }
 
-#' Log Execution Time of a Pipeline Step
-#'
-#' Records the time taken to process a pipeline step and logs it to a file.
-#' Returns the input unchanged to allow continued piping or assignment.
-#'
-#' @param .data Any R object, usually the output of a pipeline step.
-#' @param label A short description of the step being timed.
-#' @param log_file Path to the log file. Default is "log_time.txt".
-#' @param time_unit Units for the time recorded: "secs", "millisecs", or "mins".
-#'   Default is "secs".
-#'
-#' @return The input `.data`, unchanged and invisibly.
-#'
-#' @examples
-#' mtcars |>
-#'   dplyr::filter(cyl == 6) |>
-#'   dplyr::summarise(mean_mpg = mean(mpg)) |>
-#'   log_time("Filter and summarise")
-#'
-log_time <- function(
-    .data,
-    label = "pipeline",
-    log_file = "log_time.txt",
-    time_unit = c("secs", "millisecs", "mins")) {
-  time_unit <- match.arg(time_unit)
-
-  start <- Sys.time()
-  result <- .data
-  end <- Sys.time()
-
-  duration <- as.numeric(difftime(end, start, units = "secs"))
-
-  duration <- switch(time_unit,
-    secs = duration,
-    millisecs = duration * 1000,
-    mins = duration / 60
-  )
-
-  entry_log <- sprintf(
-    "[%s] %s: %.4f %s\n",
-    format(start, "%Y-%m-%d %H:%M:%OS3"),
-    label,
-    duration,
-    time_unit
-  )
-
-  cat(entry_log, file = log_file, append = TRUE)
-
-  invisible(result)
-}
-
 # =================================================
 # Tree generation
 # =================================================
@@ -318,4 +267,39 @@ check_forest <- function(forest) {
   )
 
   return(checks)
+}
+
+
+# =================================================
+# mixtree test wrapper
+# =================================================
+# this function takes
+mixtree_test <- function(id_A, id_B, sample_size, method) {
+  # Extract respective forests
+  forest_A <- map(forest_grid$forest[[id_A]], ~ as.data.frame(select(.x, from, to)))
+  forest_B <- map(forest_grid$forest[[id_B]], ~ as.data.frame(select(.x, from, to)))
+
+  # Sample from the forests
+  sample_A <- sample(forest_A, size = sample_size)
+  sample_B <- sample(forest_B, size = sample_size)
+
+  # Apply mixtree's test by the method
+  suppressWarnings({
+    if (method == "permanova") {
+      test <- mixtree::tree_test(sample_A, sample_B,
+        method = method,
+        test_args = list(permuations = 200)
+      )
+      p_value <- test[["Pr(>F)"]][[1]]
+    } else if (method == "chisq") {
+      test <- mixtree::tree_test(sample_A, sample_B,
+        method = method,
+        test_args = list(simulate.p.value = TRUE, B = 200)
+      )
+      p_value <- test[["p.value"]]
+    } else {
+      stop("method should be permanova or chisq")
+    }
+  })
+  return(p_value)
 }
