@@ -1,4 +1,6 @@
-if (!require("pacman")) install.packages("pacman")
+if (!require("pacman")) {
+  install.packages("pacman")
+}
 pacman::p_load(
   outbreaker2,
   ape,

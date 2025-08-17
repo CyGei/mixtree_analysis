@@ -69,9 +69,7 @@ tree_grid <- sim_config |>
   mutate(id = row_number()) |>
   mutate(
     params = pmap(pick(-id), build_params),
-    tree = future_map(params, build_tree,
-      .options = furrr_options(seed = TRUE)
-    )
+    tree = future_map(params, build_tree, .options = furrr_options(seed = TRUE))
   ) |>
   time_pipe("tree_grid", log_file = "time.log")
 
@@ -83,7 +81,9 @@ saveRDS(tree_grid, "data/tree_grid.rds")
 # Build all forests (each with its own reference tree)
 forest_grid <- tree_grid |>
   mutate(
-    forest = future_map2(tree, params,
+    forest = future_map2(
+      tree,
+      params,
       ~ build_forest(tree = .x, params = .y, forest_size = 200),
       .options = furrr_options(seed = TRUE)
     )
@@ -99,10 +99,21 @@ forest_grid <- readRDS("data/forest_grid.rds")
 
 test_grid <- forest_grid |>
   select(id, off_R, off_k, epidemic_size) |>
-  (\(df) inner_join(df, df, suffix = c("_A", "_B"), by = "epidemic_size", relationship = "many-to-many"))() |>
+  (\(df) {
+    inner_join(
+      df,
+      df,
+      suffix = c("_A", "_B"),
+      by = "epidemic_size",
+      relationship = "many-to-many"
+    )
+  })() |>
   # Keep pairs where id_A <= id_B to avoid duplicates/reversals
   filter(id_A <= id_B) |>
-  crossing(sample_size = test_config$sample_size, method = test_config$method) |>
+  crossing(
+    sample_size = test_config$sample_size,
+    method = test_config$method
+  ) |>
   mutate(
     p_value = future_pmap_dbl(
       .l = list(id_A, id_B, sample_size, method),
@@ -118,11 +129,18 @@ test_grid <- readRDS("data/test_grid.rds")
 # =================================================
 # Plot Grid
 # =================================================
-source("R/plot.test_grid.R")
-plot.test_grid()
+source("R/plot_test_grid.R")
+plot_test_grid(sample_size = 100, method = "chisq")
+plot_test_grid(sample_size = 20, half_tiles = TRUE)
+
+source("R/test.R")
+plot_test_grid(sample_size = 100, method = "permanova")
+plot_test_grid(sample_size = 20, half_tiles = TRUE)
+plot_test_grid(sample_size = 20, method = "chisq")
 
 
 # =================================================
 # Plot ROC
 # =================================================
+
 plot.ROC()

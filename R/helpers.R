@@ -150,6 +150,7 @@ build_tree <- function(params) {
     )
 
     # Check if we have exactly the target number of cases
+    # @CyGei may need add a check if the epidemic was finished
     if (nrow(out$data) == params$epidemic_size) break
   }
 
