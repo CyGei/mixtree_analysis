@@ -16,6 +16,8 @@ pacman::p_load(
   ggh4x,
   ggtext,
   ggnewscale,
+  patchwork,
+  cowplot,
   colorspace,
   LaplacesDemon
 )

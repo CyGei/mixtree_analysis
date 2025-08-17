@@ -129,15 +129,12 @@ test_grid <- readRDS("data/test_grid.rds")
 # =================================================
 # Plot Grid
 # =================================================
-source("R/plot_test_grid.R")
-plot_test_grid(sample_size = 100, method = "chisq")
-plot_test_grid(sample_size = 20, half_tiles = TRUE)
-
-source("R/test.R")
+source("R/plots.R")
+# plot_test_grid(sample_size = 20, half_tiles = TRUE)
+# plot_test_grid(sample_size = 20, method = "permanova")
+# plot_test_grid(sample_size = 20, method = "chisq")
 plot_test_grid(sample_size = 100, method = "permanova")
-plot_test_grid(sample_size = 20, half_tiles = TRUE)
-plot_test_grid(sample_size = 20, method = "chisq")
-
+plot_test_grid(sample_size = 100, half_tiles = TRUE)
 
 # =================================================
 # Plot ROC
