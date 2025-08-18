@@ -130,11 +130,19 @@ test_grid <- readRDS("data/test_grid.rds")
 # Plot Grid
 # =================================================
 source("R/plots.R")
-# plot_test_grid(sample_size = 20, half_tiles = TRUE)
-# plot_test_grid(sample_size = 20, method = "permanova")
-# plot_test_grid(sample_size = 20, method = "chisq")
-plot_test_grid(sample_size = 100, method = "permanova")
-plot_test_grid(sample_size = 100, half_tiles = TRUE)
+
+# Must be run on Rstudio to render correctly!
+p <- plot_test_grid(sample_size = 100, method = "permanova")
+ggsave(p,
+       filename = "figures/test_grid_permanova.png",
+       width = 10, height = 10)
+
+p <- plot_test_grid(sample_size = 20, half_tiles = TRUE)
+ggsave(p,
+       filename = "figures/test_grid.png",
+       width = 10, height = 10)
+
+
 
 # =================================================
 # Plot ROC

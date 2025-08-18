@@ -157,6 +157,22 @@ plot_test_grid <- function(sample_size, method = NULL, half_tiles = FALSE) {
           color = "white",
           linewidth = 0.25
         ) +
+        # Empty geom for test method
+        geom_point(aes(x = 1, y = 1, shape = method), size = 0, alpha = 0) +
+        scale_shape_manual(
+          "",
+          values = c("chisq" = 16, "permanova" = 17),
+          labels = c(
+            "chisq" = "\u25E3 χ² test",
+            "permanova" = "\u25E5 PERMANOVA"
+          ),
+          guide = guide_legend(
+            override.aes = list(size = 0, alpha = 0),
+            keywidth = unit(0, "pt"), # remove key
+            keyheight = unit(0, "pt"),
+            default.unit = "pt"
+          )
+        ) +
         scale_x_continuous(
           breaks = seq_along(levels(data$off_k_A)),
           labels = if (show_x_axis) levels(data$off_k_A) else NULL,
@@ -222,7 +238,7 @@ plot_test_grid <- function(sample_size, method = NULL, half_tiles = FALSE) {
         linewidth = 0.25,
         inherit.aes = FALSE
       ) +
-      theme_classic(base_size = 20) +
+      theme_classic(base_size = 15) +
       theme(
         legend.position = if (show_x_axis) "bottom" else "none",
         strip.placement = "outside",
