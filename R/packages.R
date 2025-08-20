@@ -1,4 +1,3 @@
-# CRAN packages
 cran_packages <- c(
   "outbreaker2",
   "ape",
@@ -19,10 +18,7 @@ cran_packages <- c(
   "colorspace",
   "LaplacesDemon"
 )
+github_packages <- c("simulacr", "o2ools", "pipetime") #CyGei
 
-install.packages(cran_packages)
-
-# GitHub packages
-remotes::install_github("CyGei/simulacr")
-remotes::install_github("CyGei/o2ools")
-remotes::install_github("CyGei/pipetime")
+all_packages <- c(cran_packages, github_packages)
+invisible(lapply(all_packages, library, character.only = TRUE))
