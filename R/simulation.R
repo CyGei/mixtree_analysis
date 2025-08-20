@@ -133,15 +133,10 @@ source("R/plots.R")
 
 # Must be run on Rstudio to render correctly!
 p <- plot_test_grid(sample_size = 100, method = "permanova")
-ggsave(p,
-       filename = "figures/test_grid_permanova.png",
-       width = 10, height = 10)
+ggsave(p, filename = "figures/test_grid_permanova.png", width = 10, height = 10)
 
 p <- plot_test_grid(sample_size = 20, half_tiles = TRUE)
-ggsave(p,
-       filename = "figures/test_grid.png",
-       width = 10, height = 10)
-
+ggsave(p, filename = "figures/test_grid.png", width = 10, height = 10)
 
 
 # =================================================

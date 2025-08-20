@@ -337,13 +337,10 @@ plot.ROC <- function() {
       group = interaction(epidemic_size, sample_size, method)
     )
   ) +
-    facet_wrap(
-      vars(epidemic_size),
-      labeller = labeller(
-        epidemic_size = \(x) paste0("Epidemic size = ", x)
-      )
+    facet_grid(
+      cols = vars(epidemic_size),
+      rows = vars(sample_size)
     ) +
-
     # Reference line
     geom_abline(
       intercept = 0,
@@ -355,8 +352,12 @@ plot.ROC <- function() {
     ) +
 
     # ROC line
-    geom_line(aes(color = factor(sample_size), linetype = method)) +
-    scale_color_grey(start = 0.6, end = 0, name = "Forest size:") +
+    geom_line(aes(color = method)) +
+    #scale_color_grey(start = 0.6, end = 0, name = "Forest size:") +
+    scale_color_manual(
+      values = c("permanova" = "#af245a", "chisq" = "#1f9969"),
+      name = "Method:"
+    ) +
 
     # # Aplha points
     # geom_point(
@@ -386,10 +387,6 @@ plot.ROC <- function() {
       x = "1 - specificity",
       y = "Sensitivity",
       color = "Forest size:"
-    ) +
-    coord_cartesian(
-      xlim = c(0, 0.25),
-      ylim = c(0.75, 1)
     ) +
     theme_light(base_size = 14) +
     theme(
