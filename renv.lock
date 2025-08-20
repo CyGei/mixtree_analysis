@@ -3,26 +3,6 @@
     "Version": "4.5.0",
     "Repositories": [
       {
-        "Name": "BioCsoft",
-        "URL": "https://bioconductor.org/packages/3.21/bioc"
-      },
-      {
-        "Name": "BioCann",
-        "URL": "https://bioconductor.org/packages/3.21/data/annotation"
-      },
-      {
-        "Name": "BioCexp",
-        "URL": "https://bioconductor.org/packages/3.21/data/experiment"
-      },
-      {
-        "Name": "BioCworkflows",
-        "URL": "https://bioconductor.org/packages/3.21/workflows"
-      },
-      {
-        "Name": "BioCbooks",
-        "URL": "https://bioconductor.org/packages/3.21/books"
-      },
-      {
         "Name": "CRAN",
         "URL": "https://cran.rstudio.com"
       }
@@ -62,29 +42,6 @@
       "Author": "Martin Morgan [aut] (ORCID: <https://orcid.org/0000-0002-5874-8148>), Marcel Ramos [aut, cre] (ORCID: <https://orcid.org/0000-0002-3242-0582>)",
       "Maintainer": "Marcel Ramos <marcel.ramos@sph.cuny.edu>",
       "Repository": "CRAN"
-    },
-    "BiocVersion": {
-      "Package": "BiocVersion",
-      "Version": "3.21.1",
-      "Source": "Bioconductor",
-      "Title": "Set the appropriate version of Bioconductor packages",
-      "Description": "This package provides repository information for the appropriate version of Bioconductor.",
-      "Authors@R": "c( person(\"Martin\", \"Morgan\", email = \"martin.morgan@roswellpark.org\", role = \"aut\"), person(\"Marcel\", \"Ramos\", email = \"marcel.ramos@sph.cuny.edu\", role = \"ctb\"), person(\"Bioconductor\", \"Package Maintainer\", email  = \"maintainer@bioconductor.org\", role = c(\"ctb\", \"cre\")))",
-      "biocViews": "Infrastructure",
-      "Depends": [
-        "R (>= 4.5.0)"
-      ],
-      "License": "Artistic-2.0",
-      "Encoding": "UTF-8",
-      "RoxygenNote": "6.0.1",
-      "git_url": "https://git.bioconductor.org/packages/BiocVersion",
-      "git_branch": "devel",
-      "git_last_commit": "1e5e5af",
-      "git_last_commit_date": "2024-10-29",
-      "Repository": "Bioconductor 3.21",
-      "NeedsCompilation": "no",
-      "Author": "Martin Morgan [aut], Marcel Ramos [ctb], Bioconductor Package Maintainer [ctb, cre]",
-      "Maintainer": "Bioconductor Package Maintainer <maintainer@bioconductor.org>"
     },
     "DEoptim": {
       "Package": "DEoptim",
@@ -3503,51 +3460,6 @@
       "NeedsCompilation": "no",
       "Repository": "CRAN"
     },
-    "o2ools": {
-      "Package": "o2ools",
-      "Version": "0.0.1",
-      "Source": "GitHub",
-      "Title": "Tools for 'outbreaker2'",
-      "Authors@R": "person(\"Cyril\", \"Geismar\", email = \"c.geismar21@imperial.ac.uk\", role = c(\"aut\", \"cre\"))",
-      "Description": "Streamlines the post-processing, summarization, and visualization of 'outbreaker2' output via a suite of helper functions. Facilitates tidy manipulation of posterior samples, integration with case metadata, generation of diagnostic plots and summary statistics.",
-      "License": "MIT + file LICENSE",
-      "Encoding": "UTF-8",
-      "Roxygen": "list(markdown = TRUE)",
-      "RoxygenNote": "7.3.2",
-      "Suggests": [
-        "knitr",
-        "rmarkdown",
-        "testthat (>= 3.0.0)",
-        "outbreaker2",
-        "incidence2",
-        "mixtree",
-        "epicontacts",
-        "dplyr",
-        "tidyr",
-        "furrr",
-        "ggplot2",
-        "igraph",
-        "tidygraph",
-        "ggraph"
-      ],
-      "Config/testthat/edition": "3",
-      "Depends": [
-        "R (>= 3.5)"
-      ],
-      "LazyData": "true",
-      "VignetteBuilder": "knitr",
-      "URL": "https://github.com/CyGei/o2ools, https://cygei.github.io/o2ools/",
-      "BugReports": "https://github.com/CyGei/o2ools/issues",
-      "RemoteType": "github",
-      "RemoteHost": "api.github.com",
-      "RemoteRepo": "o2ools",
-      "RemoteUsername": "CyGei",
-      "RemoteRef": "HEAD",
-      "RemoteSha": "356185e954daa9c9c7b013d08b2416ddeae77d16",
-      "NeedsCompilation": "no",
-      "Author": "Cyril Geismar [aut, cre]",
-      "Maintainer": "Cyril Geismar <c.geismar21@imperial.ac.uk>"
-    },
     "openssl": {
       "Package": "openssl",
       "Version": "2.3.3",
@@ -3895,44 +3807,6 @@
       "Author": "Kirill Müller [aut, cre] (ORCID: <https://orcid.org/0000-0002-1416-3412>), Hadley Wickham [aut], RStudio [cph]",
       "Maintainer": "Kirill Müller <kirill@cynkra.com>",
       "Repository": "CRAN"
-    },
-    "pipetime": {
-      "Package": "pipetime",
-      "Version": "0.0.1",
-      "Source": "GitHub",
-      "Type": "Package",
-      "Title": "Tools to Time Pipe Operations",
-      "Authors@R": "person(\"Cyril\", \"Geismar\", email = \"c.geismar21@imperial.ac.uk\", role = c(\"aut\", \"cre\", \"cph\"), comment = c(ORCID = \"0000-0002-8486-5890\"))",
-      "Description": "Enable users to measure and record the execution time of pipe operations (using |>) with optional logging to a file and output to the console.",
-      "License": "MIT + file LICENSE",
-      "Encoding": "UTF-8",
-      "Imports": [
-        "crayon"
-      ],
-      "Suggests": [
-        "testthat (>= 3.0.0)",
-        "dplyr",
-        "microbenchmark",
-        "knitr",
-        "rmarkdown"
-      ],
-      "Config/testthat/edition": "3",
-      "RoxygenNote": "7.3.2",
-      "Roxygen": "list(markdown = TRUE)",
-      "VignetteBuilder": "knitr",
-      "URL": "https://cygei.github.io/pipetime/",
-      "RemoteType": "github",
-      "RemoteHost": "api.github.com",
-      "RemoteRepo": "pipetime",
-      "RemoteUsername": "CyGei",
-      "RemoteRef": "HEAD",
-      "RemoteSha": "b5a22b39dd69b3081830e55ffc2b458d134d5a1d",
-      "NeedsCompilation": "no",
-      "Author": "Cyril Geismar [aut, cre, cph] (ORCID: <https://orcid.org/0000-0002-8486-5890>)",
-      "Maintainer": "Cyril Geismar <c.geismar21@imperial.ac.uk>",
-      "Depends": [
-        "R (>= 4.1.0)"
-      ]
     },
     "pixmap": {
       "Package": "pixmap",
