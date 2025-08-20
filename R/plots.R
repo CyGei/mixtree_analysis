@@ -57,6 +57,49 @@ plot_helpers <- function() {
   )
 }
 
+
+# =================================================
+# plot_tree
+# =================================================
+
+plot_tree <- function(tree, layout = c("cactustree", "treemap", "stress")) {
+  g <- tidygraph::as_tbl_graph(tree) |>
+    activate(nodes) |>
+    mutate(
+      date = case_when(
+        name == "1" ~ 0,
+        TRUE ~ tree$date[match(name, tree$to)]
+      )
+    )
+
+  # Create tree layout and replace x with date
+  layout_df <- create_layout(g, layout = match.arg(layout)) |>
+    mutate(x = date)
+
+  max_date <- max(tree$date, na.rm = TRUE)
+
+  ggraph::ggraph(layout_df) +
+    geom_node_label(
+      aes(label = name),
+      colour = "black",
+      size = 5,
+    ) +
+    geom_edge_link(
+      arrow = arrow(length = unit(1.5, 'mm')),
+      start_cap = circle(3, 'mm'),
+      end_cap = circle(3, 'mm')
+    ) +
+    scale_x_continuous(breaks = seq(0, max_date, 1)) +
+    labs(x = "Date", y = "") +
+    theme_classic() +
+    # add vertical grid lines
+    theme(
+      axis.text.y = element_blank(),
+      axis.ticks.y = element_blank(),
+      panel.grid.major.x = element_line(color = "grey90", size = 0.5)
+    )
+}
+
 # =================================================
 # test_grid
 # =================================================

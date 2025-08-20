@@ -1,3 +1,87 @@
+source("R/packages.R")
+source("R/helpers.R")
+source("R/plots.R")
+set.seed(000)
+
+params_ss <- build_params(
+  off_R = 2,
+  off_k = 0.3,
+  gt_sd = 1.5,
+  gt_mu = 3,
+  epidemic_size = 100,
+  duration = 365
+)
+
+params_pois <- build_params(
+  off_R = 2,
+  off_k = 1e5,
+  gt_sd = 1.5,
+  gt_mu = 3,
+  epidemic_size = 100,
+  duration = 365
+)
+
+tree_ss <- build_tree(params_ss)
+tree_pois <- build_tree(params_pois)
+
+tree_ss |> count(from) |> pull(n) |> summary()
+tree_pois |> count(from) |> pull(n) |> summary()
+
+plot_tree(tree_ss)
+plot_tree(tree_pois)
+
+
+forest_ss <- build_forest(tree = tree_ss, params = params_ss)
+forest_pois <- build_forest(tree = tree_pois, params = params_pois)
+plot_tree(forest_ss[[1]])
+plot_tree(forest_pois[[1]])
+
+forest_ss[[1]] |> count(from) |> pull(n) |> summary()
+forest_pois[[1]] |> count(from) |> pull(n) |> summary()
+
+
+
+
+sample_size <- 100
+sample_ss <- sample(forest_ss, sample_size)
+sample_pois <- sample(forest_pois, sample_size)
+sample_ss <- lapply(sample_ss, \(x) select(x, from, to) |> as.data.frame())
+sample_pois <-lapply(sample_pois, \(x) select(x, from, to) |> as.data.frame())
+
+# A
+mixtree::tree_test(
+  sample_ss, sample_ss, method = "permanova",
+  test_args = list(permutations = 100)
+)
+
+mixtree::tree_test(
+  sample_ss, sample_ss, method = "chisq",
+  test_args = list(simulate.p.value = TRUE, B = 100)
+)
+
+#B
+mixtree::tree_test(
+  sample_ss, sample_pois, method = "permanova",
+  test_args = list(permutations = 100)
+)
+
+mixtree::tree_test(
+  sample_ss, sample_pois, method = "chisq",
+  test_args = list(simulate.p.value = TRUE, B = 100)
+)
+
+# C
+mixtree::tree_test(
+  sample_pois, sample_pois, method = "permanova",
+  test_args = list(permutations = 100)
+)
+mixtree::tree_test(
+  sample_pois, sample_pois, method = "chisq",
+  test_args = list(simulate.p.value = TRUE, B = 100)
+)
+
+
+
 # Create binary truth: 0 = same distribution, 1 = different distribution
 roc_df <- test_grid |>
   filter(sample_size == 100) |>
