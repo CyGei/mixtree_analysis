@@ -73,6 +73,7 @@ print.params <- function(x, ...) {
   cat("Simulation settings:\n")
   cat(" epidemic size:", x$epidemic_size, "\n")
   cat(" simulation duration:", x$duration, "\n")
+  cat(" replicates:", x$replicates, "\n")
 
   invisible(x)
 }
@@ -87,16 +88,24 @@ print.params <- function(x, ...) {
 #' @param gt_sd Numeric. Standard deviation of generation time (gamma distribution).
 #' @param epidemic_size Integer. The epidemic's final size (number of cases).
 #' @param duration Integer. Duration of the simulation (in days).
+#' @param replicates Integer. Nnumber of trees to simulate.
 #'
 #' @return An object of class \code{"params"} containing simulation settings.
-build_params <- function(off_R, off_k, gt_mu, gt_sd, epidemic_size, duration) {
+build_params <- function(
+  off_R,
+  off_k,
+  gt_mu,
+  gt_sd,
+  epidemic_size,
+  duration,
+  replicates
+) {
   offspring_dist <- list(
     name = "nbinom",
     parameters = list(k = off_k, R = off_R),
     r = function(n = 1) rnbinom(n = n, size = off_k, mu = off_R),
     d = function(x) dnbinom(x, size = off_k, mu = off_R)
   )
-
 
   gt_cv <- gt_sd / gt_mu
   gt_params <- epitrix::gamma_mucv2shapescale(mu = gt_mu, cv = gt_cv)
@@ -118,7 +127,8 @@ build_params <- function(off_R, off_k, gt_mu, gt_sd, epidemic_size, duration) {
     offspring_dist = offspring_dist,
     generation_time = generation_time,
     epidemic_size = epidemic_size,
-    duration = duration
+    duration = duration,
+    replicates = replicates
   )
   class(params) <- "params"
 
@@ -138,34 +148,40 @@ build_params <- function(off_R, off_k, gt_mu, gt_sd, epidemic_size, duration) {
 #' @return A tibble with columns \code{from}, \code{to}, and \code{date}, representing transmission events.
 #'
 build_tree <- function(params) {
-  expected_AR <- epitrix::R02AR(params$offspring_dist$parameters$R)
+  replicate_tree <- function(rep_id) {
+    expected_AR <- epitrix::R02AR(params$offspring_dist$parameters$R)
+    max_gt <- which(params$generation_time$d(0:params$duration) > 0) |> max()
 
-  repeat {
-    out <- simulacr::simulate_outbreak(
-      duration = params$duration,
-      population_size = round(params$epidemic_size / expected_AR),
-      R_values = params$offspring_dist$r(params$epidemic_size),
-      dist_generation_time = params$generation_time$d(0:params$duration),
-      dist_incubation = 1L
-    )
+    repeat {
+      out <- simulacr::simulate_outbreak(
+        duration = params$duration,
+        population_size = round(params$epidemic_size / expected_AR),
+        R_values = params$offspring_dist$r(params$epidemic_size),
+        dist_generation_time = params$generation_time$d(0:params$duration),
+        dist_incubation = 1L
+      )$data
 
-    # Check if we have exactly the target number of cases
-    # @CyGei may need add a check if the epidemic was finished
-    if (nrow(out$data) == params$epidemic_size) break
+      # Check if the outbreak has the target size and is over
+      n_cases_ok <- nrow(out) == params$epidemic_size
+      epidemic_done <- (max(out$date_infection) + max_gt) <= params$duration
+      if (n_cases_ok && epidemic_done) break
+    }
+
+    tree <- out |>
+      transmute(
+        from = source,
+        to = id,
+        date = date_infection # row_number() @CyGei Do we have to avoid same dates?
+      ) |>
+      relabel_tree(id_cols = c("from", "to"), date_col = "date") |>
+      as_tibble()
+
+    mixtree::validate_tree(tree |> slice(-1))
+
+    return(tree)
   }
 
-  tree <- out$data |>
-    transmute(
-      from = source,
-      to = id,
-      date = date_infection # row_number() @CyGei Do we have to avoid same dates?
-    ) |>
-    relabel_tree(id_cols = c("from", "to"), date_col = "date") |>
-    as_tibble()
-
-  mixtree::validate_tree(tree |> slice(-1))
-
-  return(tree)
+  lapply(X = seq_len(params$replicates), FUN = replicate_tree)
 }
 
 # -------------------------------------------------
@@ -216,7 +232,11 @@ build_forest <- function(tree, params, forest_size = 200L) {
 
       # if (nrow(j_candidates) == 0) next
 
-      j_chosen <- sample(j_candidates$i, 1, prob = j_candidates$foi / sum(j_candidates$foi))
+      j_chosen <- sample(
+        j_candidates$i,
+        1,
+        prob = j_candidates$foi / sum(j_candidates$foi)
+      )
       sim_tree$j[row] <- j_chosen
     }
     # safety checks
@@ -274,11 +294,28 @@ check_forest <- function(forest) {
 # =================================================
 # mixtree test wrapper
 # =================================================
-# this function takes
-mixtree_test <- function(id_A, id_B, sample_size, method) {
+# this function takes the relevant IDs to extract the respective forests,
+# samples from them, and applies mixtree's tree_test function
+mixtree_test <- function(
+  param_id_A,
+  tree_id_A,
+  param_id_B,
+  tree_id_B,
+  sample_size,
+  method
+) {
   # Extract respective forests
-  forest_A <- map(forest_grid$forest[[id_A]], ~ as.data.frame(select(.x, from, to)))
-  forest_B <- map(forest_grid$forest[[id_B]], ~ as.data.frame(select(.x, from, to)))
+  forest_A <- forest_grid |>
+    filter(param_id == param_id_A, tree_id == tree_id_A) |>
+    pull(forest) |>
+    purrr::pluck(1) |>
+    purrr::map(~ as.data.frame(dplyr::select(.x, from, to)))
+
+  forest_B <- forest_grid |>
+    filter(param_id == param_id_B, tree_id == tree_id_B) |>
+    pull(forest) |>
+    purrr::pluck(1) |>
+    purrr::map(~ as.data.frame(dplyr::select(.x, from, to)))
 
   # Sample from the forests
   sample_A <- sample(forest_A, size = sample_size)
@@ -287,13 +324,17 @@ mixtree_test <- function(id_A, id_B, sample_size, method) {
   # Apply mixtree's test by the method
   suppressWarnings({
     if (method == "permanova") {
-      test <- mixtree::tree_test(sample_A, sample_B,
+      test <- mixtree::tree_test(
+        sample_A,
+        sample_B,
         method = method,
         test_args = list(permuations = 200)
       )
       p_value <- test[["Pr(>F)"]][[1]]
     } else if (method == "chisq") {
-      test <- mixtree::tree_test(sample_A, sample_B,
+      test <- mixtree::tree_test(
+        sample_A,
+        sample_B,
         method = method,
         test_args = list(simulate.p.value = TRUE, B = 200)
       )

@@ -64,7 +64,7 @@ plot_helpers <- function() {
 
 plot_tree <- function(tree, layout = c("cactustree", "treemap", "stress")) {
   g <- tidygraph::as_tbl_graph(tree) |>
-    activate(nodes) |>
+    tidygraph::activate(nodes) |>
     mutate(
       date = case_when(
         name == "1" ~ 0,
@@ -73,18 +73,18 @@ plot_tree <- function(tree, layout = c("cactustree", "treemap", "stress")) {
     )
 
   # Create tree layout and replace x with date
-  layout_df <- create_layout(g, layout = match.arg(layout)) |>
+  layout_df <- ggraph::create_layout(g, layout = match.arg(layout)) |>
     mutate(x = date)
 
   max_date <- max(tree$date, na.rm = TRUE)
 
   ggraph::ggraph(layout_df) +
-    geom_node_label(
+    ggraph::geom_node_label(
       aes(label = name),
       colour = "black",
       size = 5,
     ) +
-    geom_edge_link(
+    ggraph::geom_edge_link(
       arrow = arrow(length = unit(1.5, 'mm')),
       start_cap = circle(3, 'mm'),
       end_cap = circle(3, 'mm')

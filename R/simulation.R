@@ -4,7 +4,8 @@
 source("R/packages.R")
 source("R/helpers.R")
 set.seed(000)
-
+options(pipetime.log_file = "pipetime.log")
+options(pipetime.time_unit = "hours")
 # =================================================
 # Configuration
 # =================================================
@@ -18,12 +19,12 @@ sim_config <- list(
   gt_mu = 3,
   gt_sd = 1.5,
   epidemic_size = c(20, 50, 100, 200),
-  duration = 365
+  duration = 365,
+  replicates = 10
 )
-# Number of unique outbreak simulations
-# Represents all distinct combinations of the varying outbreak parameters
-n_sims <- map_int(sim_config, length) |> prod()
-cat("Number of outbreak simulations:", n_sims, "\n")
+# Number of unique parameter sets
+n_params <- map_int(sim_config, length) |> prod()
+cat("Number of unique parameter sets:", n_params, "\n")
 
 # -------------------------------------------------
 # Number of unique test conditions
@@ -39,12 +40,12 @@ cat("Number of test conditions:", n_tests, "\n")
 # -------------------------------------------------
 # Number of comparison pairs
 # -------------------------------------------------
-# Total number of pairwise comparisons between outbreak simulations,
+# Total number of pairwise comparisons between forests,
 # including self-comparisons but counting each pair only once
 # (e.g. keep A vs B, ignore not B vs A)
 n_pairs <- with(
   sim_config,
-  rep(length(off_R) * length(off_k), times = length(epidemic_size))
+  rep(length(off_R) * length(off_k) * replicates, times = length(epidemic_size))
 ) |>
   map_dbl(~ .x * (.x + 1) / 2) |>
   sum()
@@ -61,17 +62,17 @@ cat("Total number of tests to perform:", n_pairs * n_tests, "\n")
 # =================================================
 # Generate a reference transmission tree per outbreak setting
 
-plan(multisession, workers = availableCores() - 2)
+plan(multisession, workers = availableCores() - 1)
 
 tree_grid <- sim_config |>
   expand.grid(stringsAsFactors = FALSE) |>
   as_tibble() |>
-  mutate(id = row_number()) |>
+  mutate(param_id = row_number()) |>
   mutate(
-    params = pmap(pick(-id), build_params),
+    params = pmap(pick(-param_id), build_params),
     tree = future_map(params, build_tree, .options = furrr_options(seed = TRUE))
   ) |>
-  time_pipe("tree_grid", log_file = "time.log")
+  time_pipe("tree_grid")
 
 saveRDS(tree_grid, "data/tree_grid.rds")
 
@@ -80,6 +81,10 @@ saveRDS(tree_grid, "data/tree_grid.rds")
 # =================================================
 # Build all forests (each with its own reference tree)
 forest_grid <- tree_grid |>
+  unnest(tree) |>
+  group_by(param_id) |>
+  mutate(tree_id = row_number()) |>
+  ungroup() |>
   mutate(
     forest = future_map2(
       tree,
@@ -88,17 +93,16 @@ forest_grid <- tree_grid |>
       .options = furrr_options(seed = TRUE)
     )
   ) |>
-  time_pipe("forest_grid", log_file = "time.log")
+  time_pipe("forest_grid")
 
 saveRDS(forest_grid, "data/forest_grid.rds")
 
 # =================================================
 # Test results
 # =================================================
-forest_grid <- readRDS("data/forest_grid.rds")
 
 test_grid <- forest_grid |>
-  select(id, off_R, off_k, epidemic_size) |>
+  select(param_id, tree_id, off_R, off_k, epidemic_size, forest) |>
   (\(df) {
     inner_join(
       df,
@@ -108,23 +112,22 @@ test_grid <- forest_grid |>
       relationship = "many-to-many"
     )
   })() |>
-  # Keep pairs where id_A <= id_B to avoid duplicates/reversals
-  filter(id_A <= id_B) |>
+  # Keep pairs where params A <= B
+  filter(param_id_A <= param_id_B) |>
   crossing(
     sample_size = test_config$sample_size,
     method = test_config$method
   ) |>
   mutate(
     p_value = future_pmap_dbl(
-      .l = list(id_A, id_B, sample_size, method),
+      .l = list(forest_A, forest_B, sample_size, method),
       .f = mixtree_test,
       .options = furrr_options(seed = TRUE)
     )
   ) |>
-  time_pipe("test_grid", log_file = "time.log")
+  time_pipe("test_grid")
 
 saveRDS(test_grid, "data/test_grid.rds")
-test_grid <- readRDS("data/test_grid.rds")
 
 # =================================================
 # Plot Grid

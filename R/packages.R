@@ -13,6 +13,8 @@ cran_packages <- c(
   "ggh4x",
   "ggtext",
   "ggnewscale",
+  "tidygraph",
+  "ggraph",
   "patchwork",
   "cowplot",
   "colorspace",
@@ -22,3 +24,9 @@ github_packages <- c("simulacr", "o2ools", "pipetime") #CyGei
 
 all_packages <- c(cran_packages, github_packages)
 invisible(lapply(all_packages, library, character.only = TRUE))
+
+rm(
+  cran_packages,
+  github_packages,
+  all_packages
+)

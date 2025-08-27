@@ -40,46 +40,72 @@ forest_ss[[1]] |> count(from) |> pull(n) |> summary()
 forest_pois[[1]] |> count(from) |> pull(n) |> summary()
 
 
-
-
 sample_size <- 100
 sample_ss <- sample(forest_ss, sample_size)
 sample_pois <- sample(forest_pois, sample_size)
 sample_ss <- lapply(sample_ss, \(x) select(x, from, to) |> as.data.frame())
-sample_pois <-lapply(sample_pois, \(x) select(x, from, to) |> as.data.frame())
+sample_pois <- lapply(sample_pois, \(x) select(x, from, to) |> as.data.frame())
 
 # A
 mixtree::tree_test(
-  sample_ss, sample_ss, method = "permanova",
+  sample_ss,
+  sample_ss,
+  method = "permanova",
   test_args = list(permutations = 100)
 )
 
 mixtree::tree_test(
-  sample_ss, sample_ss, method = "chisq",
+  sample_ss,
+  sample_ss,
+  method = "chisq",
   test_args = list(simulate.p.value = TRUE, B = 100)
 )
 
 #B
 mixtree::tree_test(
-  sample_ss, sample_pois, method = "permanova",
+  sample_ss,
+  sample_pois,
+  method = "permanova",
   test_args = list(permutations = 100)
 )
 
 mixtree::tree_test(
-  sample_ss, sample_pois, method = "chisq",
+  sample_ss,
+  sample_pois,
+  method = "chisq",
   test_args = list(simulate.p.value = TRUE, B = 100)
 )
 
 # C
 mixtree::tree_test(
-  sample_pois, sample_pois, method = "permanova",
+  sample_pois,
+  sample_pois,
+  method = "permanova",
   test_args = list(permutations = 100)
 )
 mixtree::tree_test(
-  sample_pois, sample_pois, method = "chisq",
+  sample_pois,
+  sample_pois,
+  method = "chisq",
   test_args = list(simulate.p.value = TRUE, B = 100)
 )
+params <- build_params(
+  off_R = 2,
+  off_k = 0.3,
+  gt_sd = 1.5,
+  gt_mu = 3,
+  epidemic_size = 100,
+  duration = 365,
+  replicates = 1
+)
 
+out <- simulacr::simulate_outbreak(
+  duration = params$duration,
+  population_size = 100,
+  R_values = params$offspring_dist$r(params$epidemic_size),
+  dist_generation_time = params$generation_time$d(0:params$duration),
+  dist_incubation = 1L
+)
 
 
 # Create binary truth: 0 = same distribution, 1 = different distribution
