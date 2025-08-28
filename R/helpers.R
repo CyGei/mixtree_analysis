@@ -255,42 +255,6 @@ build_forest <- function(tree, params, forest_size = 200L) {
 }
 
 
-# -------------------------------------------------
-# Forest checks
-# -------------------------------------------------
-
-# Function to check consistency and variation in columns across all data frames in the list
-check_forest <- function(forest) {
-  # Extract 'to' and 'date' columns from the first data frame as a reference
-  ref_to <- forest[[1]]$to
-  ref_date <- forest[[1]]$date
-  ref_R <- forest[[1]]$R
-  ref_from <- forest[[1]]$from
-
-  # Check if 'to' and 'date' are consistent in all data frames
-  consistent_to_date <- all(
-    sapply(forest, function(df) {
-      all(df$to == ref_to) && all(df$date == ref_date)
-    })
-  )
-
-  # Check if 'R' and 'from' columns vary across data frames
-  vary_R_from <- any(
-    sapply(forest, function(df) {
-      !all(df$R == ref_R) || !all(df$from == ref_from)
-    })
-  )
-
-  # Return a list with both checks
-  checks <- list(
-    consistent_to_date = consistent_to_date,
-    vary_R_from = vary_R_from
-  )
-
-  return(checks)
-}
-
-
 # =================================================
 # mixtree test wrapper
 # =================================================
@@ -304,31 +268,34 @@ mixtree_test <- function(
   sample_size,
   method
 ) {
-  # Extract respective forests
-  forest_A <- forest_grid |>
-    filter(param_id == param_id_A, tree_id == tree_id_A) |>
-    pull(forest) |>
-    purrr::pluck(1) |>
-    purrr::map(~ as.data.frame(dplyr::select(.x, from, to)))
+  # Open Arrow dataset
+  ds <- open_dataset("data/forests", format = "parquet")
 
-  forest_B <- forest_grid |>
-    filter(param_id == param_id_B, tree_id == tree_id_B) |>
-    pull(forest) |>
-    purrr::pluck(1) |>
-    purrr::map(~ as.data.frame(dplyr::select(.x, from, to)))
+  # Function to load a single forest
+  load_forest <- function(param_id, tree_id) {
+    ds |>
+      filter(param_id == !!param_id, tree_id == !!tree_id) |>
+      collect() |>
+      pull(forest) |>
+      pluck(1) |>
+      map(~ as.data.frame(select(.x, from, to)))
+  }
+
+  forest_A <- load_forest(param_id_A, tree_id_A)
+  forest_B <- load_forest(param_id_B, tree_id_B)
 
   # Sample from the forests
   sample_A <- sample(forest_A, size = sample_size)
   sample_B <- sample(forest_B, size = sample_size)
 
-  # Apply mixtree's test by the method
+  # Apply mixtree test
   suppressWarnings({
     if (method == "permanova") {
       test <- mixtree::tree_test(
         sample_A,
         sample_B,
         method = method,
-        test_args = list(permuations = 200)
+        test_args = list(permutations = 200)
       )
       p_value <- test[["Pr(>F)"]][[1]]
     } else if (method == "chisq") {
@@ -343,5 +310,6 @@ mixtree_test <- function(
       stop("method should be permanova or chisq")
     }
   })
+
   return(p_value)
 }

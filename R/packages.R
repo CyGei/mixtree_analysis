@@ -5,6 +5,7 @@ cran_packages <- c(
   "vegan",
   "distcrete",
   "tidyverse",
+  "arrow",
   "scales",
   "epitrix",
   "purrr",
