@@ -254,41 +254,30 @@ build_forest <- function(tree, params, forest_size = 200L) {
   return(forest)
 }
 
+# Helper to write forests to parquet files
+write_forest <- function(param_id, tree_id, params, tree) {
+  forest_tbl <- tibble(
+    param_id = param_id,
+    tree_id = tree_id,
+    forest = list(build_forest(tree, params))
+  )
+
+  write_dataset(
+    forest_tbl,
+    path = "data/forests",
+    format = "parquet",
+    partitioning = c("param_id", "tree_id"),
+    existing_data_behavior = "overwrite"
+  )
+}
+
 
 # =================================================
 # mixtree test wrapper
 # =================================================
-# this function takes the relevant IDs to extract the respective forests,
-# samples from them, and applies mixtree's tree_test function
-mixtree_test <- function(
-  param_id_A,
-  tree_id_A,
-  param_id_B,
-  tree_id_B,
-  sample_size,
-  method
-) {
-  # Open Arrow dataset
-  ds <- open_dataset("data/forests", format = "parquet")
-
-  # Function to load a single forest
-  load_forest <- function(param_id, tree_id) {
-    ds |>
-      filter(param_id == !!param_id, tree_id == !!tree_id) |>
-      collect() |>
-      pull(forest) |>
-      pluck(1) |>
-      map(~ as.data.frame(select(.x, from, to)))
-  }
-
-  forest_A <- load_forest(param_id_A, tree_id_A)
-  forest_B <- load_forest(param_id_B, tree_id_B)
-
-  # Sample from the forests
-  sample_A <- sample(forest_A, size = sample_size)
-  sample_B <- sample(forest_B, size = sample_size)
-
-  # Apply mixtree test
+# Helper function to run one test given pre-loaded forests
+mixtree_test <- function(sample_A, sample_B, method) {
+  # The suppressWarnings block is moved here
   suppressWarnings({
     if (method == "permanova") {
       test <- mixtree::tree_test(
@@ -307,9 +296,44 @@ mixtree_test <- function(
       )
       p_value <- test[["p.value"]]
     } else {
-      stop("method should be permanova or chisq")
+      stop("Method should be 'permanova' or 'chisq'")
     }
   })
-
   return(p_value)
+}
+
+# Processes a whole group of tests that share the same input forests
+mixtree_chunk <- function(chunk) {
+  # Load the forests
+  ds <- open_dataset("data/forests", format = "parquet")
+  load_forest <- function(param_id, tree_id) {
+    ds |>
+      filter(param_id == !!param_id, tree_id == !!tree_id) |>
+      collect() |>
+      pull(forest) |>
+      pluck(1) |>
+      map(~ as.data.frame(select(.x, from, to)))
+  }
+
+  # Get the unique identifiers for this group from the first row
+  keys <- chunk[1, ]
+  forest_A <- load_forest(keys$param_id_A, keys$tree_id_A)
+  forest_B <- load_forest(keys$param_id_B, keys$tree_id_B)
+
+  # Add a p_value column by iterating over the rows of the group
+  result_chunk <- chunk |>
+    mutate(
+      p_value = pmap_dbl(
+        .l = list(sample_size = sample_size, method = method),
+        .f = function(sample_size, method) {
+          sample_A <- sample(forest_A, size = sample_size)
+          sample_B <- sample(forest_B, size = sample_size)
+
+          # Run the test
+          mixtree_test(sample_A, sample_B, method = method)
+        }
+      )
+    )
+
+  return(result_chunk)
 }

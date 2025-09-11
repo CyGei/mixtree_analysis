@@ -24,7 +24,9 @@ cran_packages <- c(
 github_packages <- c("simulacr", "o2ools", "pipetime") #CyGei
 
 all_packages <- c(cran_packages, github_packages)
-invisible(lapply(all_packages, library, character.only = TRUE))
+invisible(lapply(all_packages, function(pkg) {
+  suppressPackageStartupMessages(library(pkg, character.only = TRUE))
+}))
 
 rm(
   cran_packages,
