@@ -1,11 +1,14 @@
 # This scripts analyses the results of the simulation study `results_grid.rds`.
 source("R/packages.R")
-results_raw <- readRDS("data/results_raw.rds")
+source("R/plots.R")
+#results_raw <- readRDS("data/results_raw.rds")
 
 results_grid <- readRDS("data/results_grid.rds") |>
   as_tibble() |>
   select(-c(starts_with("gt_sd"), starts_with("gt_mu"), duration, replicates))
 results_grid
+
+plot.ROC()
 
 df_1 <- results_grid |>
   mutate(

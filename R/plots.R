@@ -19,7 +19,7 @@ plot_helpers <- function() {
     pals[[name]]
   }
 
-  test_grid_labeller <- function(df) {
+  results_grid_labeller <- function(df) {
     labeller(
       .rows = function(x) {
         vals <- levels(df$off_R_A)
@@ -52,7 +52,7 @@ plot_helpers <- function() {
 
   list(
     palettes = palettes,
-    test_grid_labeller = test_grid_labeller
+    results_grid_labeller = results_grid_labeller
     # add more functions here
   )
 }
@@ -101,21 +101,21 @@ plot_tree <- function(tree, layout = c("cactustree", "treemap", "stress")) {
 }
 
 # =================================================
-# test_grid
+# results_grid
 # =================================================
 
-plot_test_grid <- function(sample_size, method = NULL, half_tiles = FALSE) {
+plot_results_grid <- function(forest_size, method = NULL, half_tiles = FALSE) {
   helpers <- plot_helpers()
   # Input validation
   stopifnot(
-    is.numeric(sample_size) && length(sample_size) == 1,
+    is.numeric(forest_size) && length(forest_size) == 1,
     is.null(method) || (is.character(method) && length(method) == 1),
     is.logical(half_tiles) && length(half_tiles) == 1
   )
 
   # Load and prepare base data
-  df <- readRDS("data/test_grid.rds") |>
-    filter(sample_size == !!sample_size) |>
+  df <- readRDS("data/results_grid") |>
+    filter(forest_size == !!forest_size) |>
     mutate(
       across(-p_value, ~ factor(.x, levels = sort(unique(.x)))),
       significance = if_else(p_value < 0.05, "Significant", "Non-significant")
@@ -266,7 +266,7 @@ plot_test_grid <- function(sample_size, method = NULL, half_tiles = FALSE) {
         rows = vars(factor(off_R_A, levels = rev(levels(off_R_A)))),
         cols = vars(epidemic_size, off_R_B),
         nest_line = element_line(linetype = 1),
-        labeller = helpers$test_grid_labeller(plot_df)
+        labeller = helpers$results_grid_labeller(plot_df)
       ) +
       scale_fill_manual(values = helpers$palettes("significance")) +
       geom_segment(
@@ -319,21 +319,23 @@ plot_test_grid <- function(sample_size, method = NULL, half_tiles = FALSE) {
 # plot.ROC
 # =================================================
 
-plot.ROC <- function() {
+plot.ROC <- function(alpha_values = NULL) {
   # -------------------------------------------------
   # Define multiple alpha thresholds
   # -------------------------------------------------
-  alpha_values <- seq(0, 1, 0.01)
+  if (is.null(alpha_values)) {
+    alpha_values <- seq(0, 1, by = 0.1)
+  }
 
   # -------------------------------------------------
   # Compute performance metrics for each alpha
   # -------------------------------------------------
-  roc_df <- expand_grid(test_grid, alpha = alpha_values) |>
+  roc_df <- expand_grid(results_grid, alpha = alpha_values) |>
     mutate(across(
-      c(epidemic_size, sample_size, method),
+      c(epidemic_size, forest_size, method),
       ~ factor(.x, levels = sort(unique(.x)))
     )) |>
-    group_by(epidemic_size, sample_size, method, alpha) |>
+    group_by(epidemic_size, forest_size, method, alpha) |>
     mutate(
       true_diff = (off_R_A != off_R_B) | (off_k_A != off_k_B),
       test_reject = p_value < alpha
@@ -359,7 +361,7 @@ plot.ROC <- function() {
   #     )
   #   ) |>
   #   filter(!is.na(alpha_cat)) |>
-  #   group_by(epidemic_size, sample_size, alpha_cat) |>
+  #   group_by(epidemic_size, forest_size, alpha_cat) |>
   #   slice_min(order_by = abs(alpha - as.numeric(alpha_cat)), n = 1) |>
   #   ungroup() |>
   #   mutate(
@@ -377,12 +379,12 @@ plot.ROC <- function() {
     aes(
       x = 1 - specificity,
       y = sensitivity,
-      group = interaction(epidemic_size, sample_size, method)
+      group = interaction(epidemic_size, forest_size, method)
     )
   ) +
     facet_grid(
       cols = vars(epidemic_size),
-      rows = vars(sample_size)
+      rows = vars(forest_size)
     ) +
     # Reference line
     geom_abline(
@@ -451,11 +453,11 @@ plot.ROC <- function() {
 
 # AUC ---------------------------------------------------------------------
 # roc_df %>%
-#   group_by(method, sample_size, epidemic_size) %>%
+#   group_by(method, forest_size, epidemic_size) %>%
 #   summarise(AUC = mean(AUC)) %>%
 #   mutate(method = factor(method, levels = c("χ² test", "PERMANOVA"))) %>%
 #   ggplot() +
-#   aes(x = sample_size, y = AUC) +
+#   aes(x = forest_size, y = AUC) +
 #   facet_grid(~method) +
 #   geom_line(aes(group = epidemic_size, color = epidemic_size)) +
 #   geom_point(aes(color = epidemic_size), size = 2.5) +
@@ -498,7 +500,7 @@ plot.ROC <- function() {
 #     actual_positive = overlap_freq != "1",
 #     predicted_positive = p_value < alpha
 #   ) %>%
-#   group_by(method, epidemic_size, sample_size) %>%
+#   group_by(method, epidemic_size, forest_size) %>%
 #   summarise(
 #     precision = sum(predicted_positive & actual_positive) /
 #       sum(predicted_positive),
@@ -512,7 +514,7 @@ plot.ROC <- function() {
 #   )) +
 #   facet_grid(~method) +
 #   geom_line(aes(colour = epidemic_size)) +
-#   geom_point(aes(fill = sample_size), size = 2, shape = 21, color = "black") +
+#   geom_point(aes(fill = forest_size), size = 2, shape = 21, color = "black") +
 #   scale_color_manual(values = colorRampPalette(c("grey", "black"))(5)) +
 #   scale_fill_viridis_d(option = "D") +
 #   # scale_x_continuous(
