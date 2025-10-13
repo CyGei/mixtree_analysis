@@ -68,14 +68,14 @@ saveRDS(forest_grid, "data/forest_grid.rds")
 forest_grid <- readRDS("data/forest_grid.rds")
 
 # For faster loading during testing
-forests <- forest_grid |>
-  group_split(param_id) |>
-  map(\(param_group) {
-    param_group |>
-      select(tree_id, forest) |>
-      deframe()
-  }) |>
-  set_names(unique(forest_grid$param_id))
+forests <- readRDS("data/forest_grid.rds") |>
+  (\(df) {
+    ids <- unique(df$param_id)
+    df |>
+      group_split(param_id) |>
+      map(~ .x |> select(tree_id, forest) |> deframe()) |>
+      set_names(ids)
+  })()
 
 # =================================================
 # Test results

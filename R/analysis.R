@@ -1,48 +1,54 @@
 # This scripts analyses the results of the simulation study `results_grid.rds`.
-
 source("R/packages.R")
-results_grid <- readRDS("data/results_grid.rds")
-head(results_grid)
+results_raw <- readRDS("data/results_raw.rds")
 
+results_grid <- readRDS("data/results_grid.rds") |>
+  as_tibble() |>
+  select(-c(starts_with("gt_sd"), starts_with("gt_mu"), duration, replicates))
+results_grid
 
-# Figure 1: absolute difference between off_R_A and off_R_B
 df_1 <- results_grid |>
-  mutate(R_diff = abs(off_R_A - off_R_B)) |>
-  select(
+  mutate(
+    H0 = ifelse(param_id_A == param_id_B, TRUE, FALSE),
+    reject_H0 = ifelse(p_value < 0.05, 1, 0),
+    R_diff = abs(off_R_A - off_R_B),
+    k_diff = abs(off_k_A - off_k_B),
+  ) |>
+  group_by(
+    k_diff,
+    R_diff,
     epidemic_size,
     forest_size,
-    off_R_A,
-    off_R_B,
-    R_diff,
-    method,
-    p_value
-  )
-
-head(df_1)
-
-df_1 |>
-  group_by(epidemic_size, forest_size, method, R_diff) |>
-  # % of times p_value < 0.05
-  summarise(
-    n = n(),
-    n_signif = sum(p_value < 0.05),
-    p_signif = n_signif / n,
-    .groups = "drop"
+    method
   ) |>
-  ggplot(aes(x = R_diff, y = p_signif, color = method)) +
-  geom_line() +
+  summarise(
+    freq_reject_H0 = mean(reject_H0),
+    .groups = "drop"
+  )
+df_1
+
+ggplot(
+  df_1,
+  aes(x = R_diff, y = freq_reject_H0, color = method)
+) +
   geom_point() +
+  geom_line() +
   facet_grid(
     rows = vars(forest_size),
     cols = vars(epidemic_size),
-    labeller = label_both,
-    scales = "fixed"
+    labeller = label_both
   ) +
-  labs(
-    title = "Power to detect difference in R",
-    x = "|R_A - R_B|",
-    y = "Proportion of significant tests (p < 0.05)",
-    color = "Method"
+  theme_classic()
+
+ggplot(
+  df_1,
+  aes(x = k_diff, y = freq_reject_H0, color = method)
+) +
+  geom_point() +
+  geom_line() +
+  facet_grid(
+    rows = vars(forest_size),
+    cols = vars(epidemic_size),
+    labeller = label_both
   ) +
-  tracetheme::theme_trace()
-diff(c(1.5, 2.5, 4.5))
+  theme_classic()
