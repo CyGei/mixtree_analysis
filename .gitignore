@@ -1,6 +1,9 @@
 # files in data/ folder
 data/**/*.parquet
 
+# files in hipercow/ folder
+hipercow/**
+
 # History files
 .Rhistory
 .Rapp.history
