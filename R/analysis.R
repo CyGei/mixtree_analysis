@@ -5,7 +5,7 @@ source("R/plots.R")
 
 results_grid <- readRDS("data/results_grid.rds") |>
   as_tibble() |>
-  select(-c(starts_with("gt_sd"), starts_with("gt_mu"), duration, replicates))
+  select(-c(starts_with("gt_"), duration, replicates))
 results_grid
 
 plot.ROC()
@@ -45,10 +45,9 @@ ggplot(
 
 ggplot(
   df_1,
-  aes(x = k_diff, y = freq_reject_H0, color = method)
+  aes(x = as.factor(k_diff), y = freq_reject_H0, color = method)
 ) +
   geom_point() +
-  geom_line() +
   facet_grid(
     rows = vars(forest_size),
     cols = vars(epidemic_size),
