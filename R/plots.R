@@ -19,7 +19,7 @@ plot_helpers <- function() {
     pals[[name]]
   }
 
-  results_grid_labeller <- function(df) {
+  df_labeller <- function(df) {
     labeller(
       .rows = function(x) {
         vals <- levels(df$off_R_A)
@@ -52,7 +52,7 @@ plot_helpers <- function() {
 
   list(
     palettes = palettes,
-    results_grid_labeller = results_grid_labeller
+    df_labeller = df_labeller
     # add more functions here
   )
 }
@@ -114,7 +114,8 @@ plot_results_grid <- function(forest_size, method = NULL, half_tiles = FALSE) {
   )
 
   # Load and prepare base data
-  df <- readRDS("data/results_grid") |>
+  df <- readRDS("data/results_grid.rds") |>
+    filter(tree_id_A == tree_id_B) |>
     filter(forest_size == !!forest_size) |>
     mutate(
       across(-p_value, ~ factor(.x, levels = sort(unique(.x)))),
@@ -319,7 +320,7 @@ plot_results_grid <- function(forest_size, method = NULL, half_tiles = FALSE) {
 # plot.ROC
 # =================================================
 
-plot.ROC <- function(alpha_values = NULL) {
+plot.ROC <- function(df, alpha_values = NULL) {
   # -------------------------------------------------
   # Define multiple alpha thresholds
   # -------------------------------------------------
@@ -330,7 +331,7 @@ plot.ROC <- function(alpha_values = NULL) {
   # -------------------------------------------------
   # Compute performance metrics for each alpha
   # -------------------------------------------------
-  roc_df <- expand_grid(results_grid, alpha = alpha_values) |>
+  roc_df <- expand_grid(df, alpha = alpha_values) |>
     mutate(across(
       c(epidemic_size, forest_size, method),
       ~ factor(.x, levels = sort(unique(.x)))
@@ -418,6 +419,12 @@ plot.ROC <- function(alpha_values = NULL) {
     # ) +
 
     # Theme
+    coord_cartesian(
+      xlim = c(0, 1),
+      ylim = c(0, 1),
+      expand = TRUE,
+      clip = "off"
+    ) +
     scale_shape_manual(
       values = c(
         "0.0015" = 21,

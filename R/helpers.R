@@ -1,46 +1,3 @@
-# =================================================
-# Miscellaneous functions
-# =================================================
-#' Relabel IDs by Onset Date
-#'
-#' Assigns new integer labels to a vector of IDs, ordered by their associated onset dates.
-#' Returns a named vector mapping the original IDs to their new labels.
-#'
-#' @param id Character or factor vector of unique IDs.
-#' @param date Vector of onset dates corresponding to \code{id}. Must be the same length as \code{id}.
-#'
-#' @return Character vector of new labels, named by original IDs and ordered as \code{id}.
-
-label_ids <- function(id, date) {
-  ordered_ids <- id[order(date)]
-  new_labels <- as.character(seq_along(ordered_ids))
-  setNames(new_labels, ordered_ids)[id]
-}
-
-#' Relabel Data Frame ID Columns
-#' Replaces values in specified ID columns of a data frame with new labels ordered by onset date.
-#' All ID columns are relabelled consistently using the same mapping.
-#'
-#' @param df Data frame. The transmission tree
-#' @param id_cols Character vector of column names in \code{df} to relabel (e.g., \code{c("from", "to")}).
-#' @param date_col Character. Name of the column containing onset or infection dates. Default in "date"
-#'
-#' @return Data frame with updated ID columns.
-relabel_tree <- function(df, id_cols, date_col = "date") {
-  ids <- label_ids(df[[id_cols[2]]], df[[date_col]]) # Use the 2nd column for labelling
-
-  # Apply the relabelling all specified id columns
-  for (col in id_cols) {
-    df[[col]] <- ids[df[[col]]]
-  }
-
-  return(df)
-}
-
-# =================================================
-# Tree generation
-# =================================================
-
 # -------------------------------------------------
 # Epidemic Parameters
 # -------------------------------------------------
@@ -139,6 +96,28 @@ build_params <- function(
 # -------------------------------------------------
 # True transmission tree
 # -------------------------------------------------
+#' Relabel Tree IDs
+#' Replaces original case IDs with sequential integers starting from 1, ordered by infection date and ID.
+#' @param tree A tibble with columns \code{from}, \code{to}, and \code{date}.
+#' @return A tibble with the same structure as \code{tree} but with relabeled IDs.
+#' @keywords internal
+relabel_tree <- function(tree) {
+  id_map <- tree |>
+    arrange(date, to) |>
+    pull(to) |>
+    (\(id) setNames(object = as.character(seq_along(id)), nm = id))()
+
+  id_map
+
+  tree <- tree |>
+    mutate(
+      from = id_map[from],
+      to = id_map[to]
+    )
+  return(tree)
+}
+
+
 #' Simulate a True Transmission Tree
 #'
 #' Simulates a single outbreak using specified epidemic parameters until exactly epidemic_size is reached -> THROUGH TRUNCATION.!!!
@@ -168,9 +147,9 @@ build_tree <- function(params) {
       transmute(
         from = source,
         to = id,
-        date = date_infection # row_number() @CyGei Do we have to avoid same dates?
+        date = date_infection
       ) |>
-      relabel_tree(id_cols = c("from", "to"), date_col = "date") |>
+      relabel_tree() |>
       as_tibble()
 
     mixtree::validate_tree(tree |> slice(-1))
@@ -195,7 +174,7 @@ build_tree <- function(params) {
 #' @return A matrix of ancestries. Where each row corresponds to a tree and each column to a case (excluding the root).
 #' For example, entry [i, j] indicates the infector of case j in tree i.
 #'
-# Internal function
+#' @keywords internal
 .build_forest <- function(tree, params, forest_size = 200L) {
   simulate_tree <- function() {
     n_cases <- length(tree$to)

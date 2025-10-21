@@ -12,7 +12,7 @@ options(pipetime.log = "log", pipetime.unit = "min")
 # =================================================
 test_config <- list(
   method = c("permanova", "chisq"),
-  forest_size = c(20L, 50L, 100L, 200L)
+  forest_size = c(20L, 100L)
 )
 
 sim_config <- list(
@@ -52,7 +52,7 @@ tree_grid |>
   filter(param_id == 8, tree_id == 1) |>
   pull(tree) |>
   igraph::graph_from_data_frame() |>
-  plot()
+  plot(layout = layout_as_tree)
 
 
 # check that trees differ by checking their from column
@@ -203,3 +203,107 @@ plot.ROC()
 as_forest(forests[[8]][[1]])
 forests[[8]][[1]] |> nrow()
 forests[[8]][[1]][1:11, ] |> as_forest()
+
+# ------------------------------------
+#           Check trees
+# ------------------------------------
+library(fitdistrplus)
+library(ggh4x)
+# results suggests that the test is sensitive to the tree_id:
+# that is even if param_id_A == param_id_B, the test rejects H0
+# when tree_id_A != tree_id_B
+
+trees <- readRDS("data/tree_grid.rds") |>
+  mutate(
+    R = map_dbl(params, ~ .x$offspring_dist$parameters$R),
+    k = map_dbl(params, ~ .x$offspring_dist$parameters$k),
+    R_k = paste0("R = ", R, ", k = ", k),
+    epidemic_size = map_dbl(params, ~ .x$epidemic_size)
+  ) |>
+  dplyr::select(-params)
+group_vars <- c("epidemic_size", "param_id", "tree_id", "R", "k", "R_k")
+
+Ri <- trees |>
+  unnest(tree) |>
+  filter(!is.na(from)) |>
+  group_by(across(all_of(group_vars)), from) |>
+  summarise(
+    Ri = n(),
+    .groups = "drop"
+  )
+
+
+# Per-tree fits (skip trees with only one observation)
+per_tree_est <- Ri |>
+  group_by(across(all_of(group_vars))) |>
+  filter(n() > 1) |>
+  group_modify(.f = function(d, ...) {
+    fit <- fitdist(d$Ri, "nbinom")
+    est <- fit$estimate
+    sd <- fit$sd
+    tibble(
+      R_est = est["mu"],
+      k_est = est["size"],
+      k_se = sd["size"],
+      R_se = sd["mu"]
+    )
+  }) |>
+  ungroup() |>
+  mutate(
+    k_error = k_est - k,
+    log_k_error = log(k_est) - log(k),
+    R_error = R_est - R,
+    R_z = (R_est - R) / R_se,
+    k_z = (k_est - k) / k_se,
+    R_CI_ok = (R >= (R_est - 1.96 * R_se)) & (R <= (R_est + 1.96 * R_se)),
+    k_CI_ok = (k >= (k_est - 1.96 * k_se)) & (k <= (k_est + 1.96 * k_se))
+  )
+
+# Plot per-tree estimates vs true parameters
+params <- per_tree_est |>
+  dplyr::select(epidemic_size, R, k, R_k) |>
+  distinct()
+
+per_tree_est |>
+  mutate(
+    col_label = "Epidemic Size",
+  ) |>
+  ggplot() +
+  ggh4x::facet_nested(
+    rows = vars(R, k),
+    cols = vars(col_label, epidemic_size),
+    labeller = labeller(
+      R = function(x) paste0("R = ", x),
+      k = function(x) paste0("k = ", x)
+    )
+  ) +
+  geom_point(aes(x = R_error, y = log_k_error)) +
+  geom_hline(yintercept = 0, linetype = "dashed", colour = "red") +
+  geom_vline(xintercept = 0, linetype = "dashed", colour = "red") +
+  coord_cartesian() +
+  theme_classic() +
+  theme(
+    panel.border = element_rect(colour = "black", fill = NA, linewidth = 0.5)
+  )
+
+
+# ------------------------------------
+#   Compare per-tree vs pooled fits
+# ------------------------------------
+# Pooled fit
+pooled_fit <- fitdist(Ri$Ri, "nbinom")
+# AIC per tree
+per_tree_fit <- Ri |>
+  group_by(across(all_of(group_vars))) |>
+  filter(n() > 1) |>
+  group_modify(
+    ~ {
+      fit <- fitdist(.x$Ri, "nbinom")
+      tibble(aic = fit$aic)
+    }
+  ) |>
+  ungroup()
+per_tree_fit
+mean(per_tree_fit$aic)
+sum(per_tree_fit$aic)
+pooled_fit$aic

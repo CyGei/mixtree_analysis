@@ -18,8 +18,8 @@ test_config <- list(
 sim_config <- list(
   off_R = c(1.5, 2.5, 4.5),
   off_k = c(0.1, 0.5, 1e5),
-  gt_mu = 3,
-  gt_sd = 1.5,
+  gt_mu = 3, #1-2 weeks
+  gt_sd = 1.5, #flat
   epidemic_size = c(20L, 50L, 100L, 200L),
   duration = 365L,
   replicates = 100L
