@@ -1,8 +1,8 @@
 # https://mrcdata.dide.ic.ac.uk/hpc/managejobs.php
 
-# =============================================================
-# Hipercow setup
-# =============================================================
+# ------------------------------------
+#           Hipercow Setup
+# ------------------------------------
 library(hipercow)
 hipercow_init()
 setwd("P:/mixtree_analysis")
@@ -17,23 +17,17 @@ hipercow_environment_create(
 hipercow_configuration()
 
 
-# =================================================
-# Submit jobs
-# =================================================
-# Each row of test_grid is a single task to perform
-# We split into random chunks of 1000 tasks per job using job_grid
-
-test_grid <- readRDS("data/test_grid.rds")
-
+# ------------------------------------
+#           Create Jobs
+# ------------------------------------
 set.seed(123)
-idx <- sample(seq_len(nrow(test_grid)))
-chunk_size <- 1000 # number of tasks per job
-chunks <- split(idx, ceiling(seq_along(idx) / chunk_size))
-job_grid <- tibble::tibble(
-    job_id = seq_along(chunks),
-    idx = chunks
-)
-saveRDS(job_grid, "data/job_grid.rds")
+job_grid <- readRDS("data/test_grid.rds") |>
+    nrow() |>
+    seq_len() |>
+    sample() |>
+    (\(x) split(x, ceiling(seq_along(x) / 100)))() |> # 100 tasks per job
+    enframe(name = "job_id", value = "idx") |>
+    mutate(job_id = as.integer(job_id))
 
 bundle <- task_create_bulk_expr(
     expr = cow_job(idx),
@@ -44,51 +38,5 @@ bundle <- task_create_bulk_expr(
 hipercow_bundle_list()
 hipercow_bundle_status(bundle)
 hipercow_bundle_log_value(bundle)
-results_raw <- hipercow_bundle_result(bundle) |> bind_rows()
-results_raw |> object.size() |> format('Gb')
-saveRDS(results_raw, "data/results_raw.rds")
-results_raw <- readRDS("data/results_raw.rds")
-# =================================================
-# Analyze results
-# =================================================
-param_grid <- readRDS("data/param_grid.rds") |> select(-params)
-results_grid <- results_raw |>
-    left_join(param_grid, by = c("param_id_A" = "param_id")) |>
-    left_join(
-        param_grid,
-        by = c("param_id_B" = "param_id"),
-        suffix = c("_A", "_B")
-    )
 
-# Sanity checks:
-# 1.  epidemic_size_A == epidemic_size_B
-# 2. duration_A == duration_B
-# 3. replicates_A == replicates_B
-if (
-    with(
-        results_grid,
-        all(
-            epidemic_size_A == epidemic_size_B &
-                duration_A == duration_B &
-                replicates_A == replicates_B
-        )
-    )
-) {
-    results_grid <- results_grid |>
-        mutate(
-            epidemic_size = epidemic_size_A,
-            duration = duration_A,
-            replicates = replicates_A
-        ) |>
-        select(
-            -epidemic_size_A,
-            -epidemic_size_B,
-            -duration_A,
-            -duration_B,
-            -replicates_A,
-            -replicates_B
-        ) |>
-        arrange(param_id_A, param_id_B, tree_id_A, tree_id_B, epidemic_size)
-}
-
-saveRDS(results_grid, "data/results_grid.rds")
+results <- hipercow_bundle_result(bundle)

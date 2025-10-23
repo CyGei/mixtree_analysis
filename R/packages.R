@@ -17,7 +17,8 @@ cran_packages <- c(
   "patchwork",
   "cowplot",
   "colorspace",
-  "LaplacesDemon"
+  "LaplacesDemon",
+  "conflicted"
 )
 github_packages <- c("simulacr", "mixtree", "o2ools", "pipetime") #CyGei
 
@@ -26,6 +27,7 @@ invisible(lapply(all_packages, function(pkg) {
   suppressPackageStartupMessages(library(pkg, character.only = TRUE))
 }))
 
+conflicted::conflict_prefer_all(winner = "dplyr", quiet = TRUE)
 rm(
   cran_packages,
   github_packages,
