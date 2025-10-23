@@ -52,4 +52,4 @@ docs/
 po/*~
 
 # RStudio Connect folder
-rsconnect/
+rsconnect/data/forest_grid.rds
