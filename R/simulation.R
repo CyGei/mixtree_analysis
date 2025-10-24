@@ -47,7 +47,7 @@ expand_grid(!!!sim_config) |>
 #' Build a transmission tree given simulation parameters.
 #' `tree_grid` is a tibble containing a 'reference' transmission tree for each
 #' parameter set (`params`) in `param_grid`.
-#' For a given `params`, n `replicates` trees are generated to account for
+#' For a given `params`, n `replicates` trees are generated to account for stochasticity.
 #' `tree_id` is defined as `<param_id>_<replicate_id>`.
 
 readRDS("data/param_grid.rds") |>
