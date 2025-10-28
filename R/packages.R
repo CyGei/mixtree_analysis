@@ -14,10 +14,12 @@ cran_packages <- c(
   "ggnewscale",
   "tidygraph",
   "ggraph",
+  "santoku",
   "patchwork",
   "cowplot",
   "colorspace",
   "LaplacesDemon",
+  "pROC",
   "conflicted"
 )
 github_packages <- c("simulacr", "mixtree", "o2ools", "pipetime") #CyGei

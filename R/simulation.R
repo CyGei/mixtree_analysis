@@ -142,7 +142,7 @@ readRDS("data/forest_grid.rds") |>
 #' `results` is a tibble containing the results of each test performed.
 #' Each row contains the `forest_id_A`, `forest_id_B`, `method`, `forest_size`, `p_value`.
 furrr::future_pmap_dfr(
-  .l = readRDS("data/test_grid.rds")[1:10, ],
+  .l = readRDS("data/test_grid.rds"),
   .f = mixtree_test,
   forests = deframe(readRDS("data/forest_grid.rds")),
   forest_sizes = test_config$forest_size,
@@ -155,3 +155,57 @@ furrr::future_pmap_dfr(
 ) |>
   time_pipe("results") |>
   saveRDS("data/results.rds")
+
+
+# ------------------------------------
+#           results_grid
+# ------------------------------------
+#' @title results_grid
+#' @description
+#' A tibble combining `results` with corresponding parameters from `param_grid`.
+#' Each row represents a statistical test comparing two forests.
+#'
+#' Columns:
+#' - `forest_id_*`: identifiers of the compared forests
+#' - `tree_id_*`: reference tree identifiers used to generate the forests
+#' - `param_id_*`: parameter set identifiers used to generate the forests
+#' - `off_R_*`: R0 of the offspring distribution
+#' - `off_k_*`: dispersion parameter (k) of the offspring distribution
+#' - `forest_size`: number of transmission trees in each forest
+#' - `epidemic_size`: number of vertices per tree
+#' - `method`: statistical test used
+#' - `p_value`: resulting p-value
+
+readRDS("data/results.rds") |>
+  bind_rows() |>
+  as_tibble() |>
+  mutate(
+    tree_id = str_extract(forest_id_A, "^\\d+_\\d+"),
+    param_id_A = str_extract(forest_id_A, "(?<=_)\\d+$"),
+    param_id_B = str_extract(forest_id_B, "(?<=_)\\d+$"),
+    .after = starts_with("forest_id")
+  ) |>
+  left_join(
+    readRDS("data/param_grid.rds") |>
+      select(param_id, epidemic_size, starts_with("off_")) |>
+      rename_with(~ paste0(.x, "_A"), starts_with("off_")) |>
+      mutate(param_id = as.character(param_id)),
+    by = c("param_id_A" = "param_id")
+  ) |>
+  left_join(
+    readRDS("data/param_grid.rds") |>
+      select(param_id, starts_with("off_")) |>
+      rename_with(~ paste0(.x, "_B"), starts_with("off_")) |>
+      mutate(param_id = as.character(param_id)),
+    by = c("param_id_B" = "param_id")
+  ) |>
+  select(
+    tree_id,
+    starts_with("forest_id"),
+    starts_with("param_id"),
+    starts_with("off_"),
+    ends_with("_size"),
+    method,
+    p_value
+  ) |>
+  saveRDS("data/results_grid.rds")

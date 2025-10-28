@@ -1,238 +1,304 @@
 # This scripts analyses the results of the simulation study
 # `results_grid.rds`.
 source("R/packages.R")
-source("R/plots.R")
+source("R/plots2.R")
 
-df <- readRDS("data/results_grid.rds") |>
-  filter(tree_id_A == tree_id_B) |>
-  as_tibble() |>
-  select(-c(starts_with("gt_"), duration, replicates)) |>
-  mutate(across(-p_value, ~ factor(.x, levels = sort(unique(.x))))) |>
-  group_by(across(-c(p_value, starts_with("tree_id")))) |>
-  summarise(prop_reject_H0 = mean(p_value < 0.05), .groups = "drop") |>
-  select(
-    epidemic_size,
+# ------------------------------------
+#           rejection_summary
+# ------------------------------------
+#' @title rejection_summary
+#' @description
+#' A tibble summarising hypothesis test results from the simulation study `results_grid.rds`.
+#' It reports the proportion of null hypothesis (H0) rejections for each combination of parameters and test method.
+#'
+#' Columns:
+#' - `hypothesis`: whether H0 (null) or H1 (alternative) is true
+#' - `method`: statistical test used ("chisq" or "permanova")
+#' - `forest_size`: number of transmission trees per forest
+#' - `epidemic_size`: number of vertices per transmission tree
+#' - `off_R_A`, `off_R_B`: mean of the offspring distribution for forests A and B
+#' - `off_k_A`, `off_k_B`: dispersion of the offspring distribution for forests A and B
+#' - `prop_reject_H0`: proportion of tests rejecting the null hypothesis
+#'
+#' @return A tibble summarising null hypothesis rejection rates per parameter combination.
+
+rejection_summary <- readRDS("data/results_grid.rds") |>
+  mutate(
+    reject_H0 = p_value < 0.05,
+    hypothesis = if_else(param_id_A == param_id_B, "H0", "H1")
+  ) |>
+  group_by(
+    hypothesis,
+    method,
     forest_size,
+    epidemic_size,
     off_R_A,
     off_R_B,
     off_k_A,
-    off_k_B,
-    method,
-    prop_reject_H0
-  )
-
-df
-
-
-# example 1 grid
-df |>
-  filter(
-    epidemic_size == 100,
-    off_R_A == 1.5,
-    off_R_B == 1.5,
+    off_k_B
   ) |>
-  # here move tile to lower triangle for chisq test
-  mutate(
-    off_k_A_num = as.numeric(off_k_A),
-    off_k_B_num = as.numeric(off_k_B),
-
-    # off_k_A_num = case_when(
-    #   method == "chisq" & off_k_A_num ...,
-    # )
-  ) |>
-  ggplot(aes(x = off_k_A_num, y = off_k_B_num, fill = prop_reject_H0)) +
-  geom_tile(color = "white", linewidth = 0.5) +
-  scale_fill_viridis_c(name = "Prop. reject H0", limits = c(0, 1)) +
-  coord_fixed() +
-  labs(x = expression(k[A]), y = expression(k[B]))
-
-
-library(dplyr)
-library(ggplot2)
-
-df_sub <- df %>%
-  filter(
-    epidemic_size == 100,
-    off_R_A == 1.5,
-    off_R_B == 1.5
-  ) %>%
-  mutate(
-    # numeric positions for plotting
-    x = as.numeric(off_k_A),
-    y = as.numeric(off_k_B),
-
-    # remap coordinates depending on method
-    x_plot = case_when(
-      method == "chisq" ~ pmin(x, y),
-      method == "permanova" ~ pmax(x, y)
-    ),
-    y_plot = case_when(
-      method == "chisq" ~ pmax(x, y),
-      method == "permanova" ~ pmin(x, y)
-    )
-  )
-
-diag <- df_sub %>%
-  filter(x == y) %>%
-  rowwise() %>%
-  mutate(
-    polygon = list(
-      if (method == "chisq") {
-        tibble(
-          x = c(x - 0.5, x + 0.5, x - 0.5),
-          y = c(y - 0.5, y - 0.5, y + 0.5)
-        )
-      } else {
-        tibble(
-          x = c(x + 0.5, x + 0.5, x - 0.5),
-          y = c(y + 0.5, y - 0.5, y + 0.5)
-        )
-      }
-    )
-  ) %>%
-  select(-x, -y) %>% # drop originals
-  unnest(polygon) %>%
-  ungroup()
-
-
-ggplot(df_sub, aes(x = x_plot, y = y_plot, fill = prop_reject_H0)) +
-  geom_tile(color = "white", linewidth = 0.5) +
-  geom_point(aes(shape = method), size = 3, color = "black") +
-  scale_fill_viridis_c(name = "Prop. reject H0", limits = c(0, 1)) +
-  coord_fixed() +
-  scale_x_continuous(breaks = 1:3, labels = levels(df$off_k_A)) +
-  scale_y_continuous(breaks = 1:3, labels = levels(df$off_k_B)) +
-  labs(x = expression(k[A]), y = expression(k[B]))
-
-
-library(dplyr)
-library(ggplot2)
-library(tidyr)
-
-# 1. Subset the data
-df_sub <- df %>%
-  filter(
-    epidemic_size == 100,
-    off_R_A == 1.5,
-    off_R_B == 1.5
-  ) %>%
-  mutate(
-    # numeric positions for plotting
-    x = as.numeric(off_k_A),
-    y = as.numeric(off_k_B),
-    # remap coordinates depending on method
-    x_plot = case_when(
-      method == "chisq" ~ pmin(x, y),
-      method == "permanova" ~ pmax(x, y)
-    ),
-    y_plot = case_when(
-      method == "chisq" ~ pmax(x, y),
-      method == "permanova" ~ pmin(x, y)
-    )
-  )
-
-# 2. Split into off-diagonal and diagonal
-offdiag_df <- df_sub %>% filter(x != y)
-diag_df <- df_sub %>% filter(x == y)
-
-# 3. Build polygons for diagonal half-tiles
-diag_polys <- diag_df %>%
-  rowwise() %>%
-  mutate(
-    polygon = list(
-      if (method == "chisq") {
-        tibble(
-          x_poly = c(x_plot - 0.5, x_plot + 0.5, x_plot - 0.5),
-          y_poly = c(y_plot - 0.5, y_plot - 0.5, y_plot + 0.5)
-        )
-      } else {
-        tibble(
-          x_poly = c(x_plot + 0.5, x_plot + 0.5, x_plot - 0.5),
-          y_poly = c(y_plot + 0.5, y_plot - 0.5, y_plot + 0.5)
-        )
-      }
-    )
-  ) %>%
-  unnest(polygon) %>%
-  ungroup()
-
-# 4. Plot
-ggplot() +
-  # off-diagonal full tiles
-  geom_tile(
-    data = offdiag_df,
-    aes(x = x_plot, y = y_plot, fill = prop_reject_H0),
-    color = "white",
-    linewidth = 0.5
-  ) +
-  geom_point(
-    data = offdiag_df,
-    aes(x = x_plot, y = y_plot, shape = method),
-    size = 3,
-    color = "black"
-  ) +
-  # diagonal half-tiles
-  geom_polygon(
-    data = diag_polys,
-    aes(
-      x = x_poly,
-      y = y_poly,
-      group = interaction(x_plot, y_plot, method),
-      fill = prop_reject_H0
-    ),
-    color = "white",
-    linewidth = 0.5
-  ) +
-  scale_fill_viridis_c(name = "Prop. reject H0", limits = c(0, 1)) +
-  coord_fixed() +
-  scale_x_continuous(breaks = 1:3, labels = levels(df$off_k_A)) +
-  scale_y_continuous(breaks = 1:3, labels = levels(df$off_k_B)) +
-  labs(x = expression(k[A]), y = expression(k[B]))
-# Add point positions for diagonal
-# Compute centroids of diagonal polygons
-diag_points <- diag_polys %>%
-  group_by(x_plot, y_plot, method, prop_reject_H0) %>%
   summarise(
-    x_point = mean(x_poly),
-    y_point = mean(y_poly),
+    prop_reject_H0 = mean(reject_H0, na.rm = TRUE),
     .groups = "drop"
   )
+str(rejection_summary)
 
-ggplot() +
-  # off-diagonal full tiles
-  geom_tile(
-    data = offdiag_df,
-    aes(x = x_plot, y = y_plot, fill = prop_reject_H0),
-    color = "white",
-    linewidth = 0.5
+# ------------------------------------
+#           plot grids
+# ------------------------------------
+#' @title plot grids for different forest sizes
+#' @description
+#' Generates and saves heatmaps of simulation results for various `forest_size` values.
+#' Each heatmap visualises the proportion of rejected H0 across all conditions.
+#' Plots are saved as SVG files in the "figures" directory.
+map(
+  c(20L, 50L, 100L, 200L),
+  ~ {
+    p <- plot_grid(rejection_summary, forest_size = .x)
+    ggsave(
+      filename = paste0("figures/grid_", .x, ".svg"),
+      plot = p,
+      width = 12,
+      height = 12
+    )
+  }
+)
+
+# ------------------------------------
+#           ROC curves
+# ------------------------------------
+roc_df <- readRDS("data/results_grid.rds") |>
+  mutate(true_different = param_id_A != param_id_B) |>
+  group_by(method, forest_size, epidemic_size) |>
+  group_modify(~ compute_roc(.x)) |>
+  ungroup() |>
+  mutate(
+    label_epidemic_size = "Epidemic size",
+    label_forest_size = "Forest size"
+  )
+
+
+# Plot ROC curves
+ggplot(roc_df, aes(x = FPR, y = TPR, color = method)) +
+  facet_nested(
+    cols = vars(label_epidemic_size, epidemic_size),
+    rows = vars(label_forest_size, forest_size)
   ) +
-  geom_point(
-    data = offdiag_df,
-    aes(x = x_plot, y = y_plot, shape = method),
-    size = 3,
-    color = "black"
+  # Reference line
+  geom_abline(
+    intercept = 0,
+    slope = 1,
+    linetype = "dashed",
+    color = "gray50",
+    alpha = 0.5,
+    linewidth = 0.25
   ) +
-  # diagonal half-tiles
-  geom_polygon(
-    data = diag_polys,
-    aes(
-      x = x_poly,
-      y = y_poly,
-      group = interaction(x_plot, y_plot, method),
-      fill = prop_reject_H0
+
+  # ROC line
+  geom_line() +
+  scale_color_manual(
+    values = c("permanova" = "#fbac02ff", "chisq" = "#0248f8ff"),
+    name = "Method:"
+  ) +
+  # Theme
+  coord_cartesian(
+    xlim = c(0, 1),
+    ylim = c(0, 1),
+    expand = TRUE,
+    clip = "off"
+  ) +
+  labs(
+    x = "1 - specificity",
+    y = "Sensitivity",
+    color = "Forest size:"
+  ) +
+  theme_classic(base_size = 15) +
+  theme(
+    legend.position = "bottom",
+    legend.box = "vertical",
+    legend.margin = margin(t = -5),
+    legend.box.just = "left",
+    legend.spacing = unit(0.1, "cm"),
+    axis.text.x = element_blank()
+  )
+ggsave(
+  filename = "figures/roc.svg",
+  width = 8,
+  height = 8
+)
+
+# ------------------------------------
+#           AUC
+# ------------------------------------
+auc_df <- readRDS("data/results_grid.rds") |>
+  mutate(true_different = param_id_A != param_id_B) |>
+  group_by(method, forest_size, epidemic_size) |>
+  summarise(
+    AUC = roc(
+      response = true_different,
+      predictor = 1 - p_value,
+      quiet = TRUE
+    )$auc |>
+      as.numeric(),
+    .groups = "drop"
+  )
+auc_df |>
+  mutate(label_forest_size = "Forest size") |>
+  ggplot(aes(x = factor(epidemic_size), y = AUC, fill = method)) +
+  geom_bar(stat = "identity", position = position_dodge(), width = 0.7) +
+  facet_nested(cols = vars(label_forest_size, forest_size)) +
+  scale_fill_manual(
+    values = c("permanova" = "#fbac02ff", "chisq" = "#0248f8ff"),
+    name = "Method:"
+  ) +
+  scale_y_continuous(expand = c(0, 0), limits = c(0, 1)) +
+  labs(
+    x = "Epidemic size",
+    y = "Area Under the Curve (AUC)"
+  ) +
+  theme_classic(base_size = 15) +
+  theme(
+    legend.position = "bottom",
+    legend.box = "vertical",
+    legend.margin = margin(t = -5),
+    legend.box.just = "left",
+    legend.spacing = unit(0.1, "cm")
+  )
+ggsave(
+  filename = "figures/auc.svg",
+  width = 8,
+  height = 6
+)
+
+# ------------------------------------
+#           Power curves
+# ------------------------------------
+
+df <- readRDS("data/results_grid.rds") |>
+  mutate(
+    H0 = param_id_A == param_id_B,
+    reject_H0 = p_value < 0.05,
+    comparison_type = case_when(
+      H0 ~ "H0",
+      off_R_A != off_R_B & off_k_A == off_k_B ~ "\U0394 R₀",
+      off_R_A == off_R_B & off_k_A != off_k_B ~ "\U0394 \U1D458",
+      TRUE ~ "\U0394 R₀ \U0026 \U0394 \U1D458"
     ),
-    color = "white",
+    comparison_type = factor(
+      comparison_type,
+      levels = c(
+        "\U0394 R₀ \U0026 \U0394 \U1D458",
+        "\U0394 R₀",
+        "\U0394 \U1D458",
+        "H0"
+      )
+    )
+  ) |>
+  summarise(
+    rejection_rate = mean(reject_H0),
+    .by = c(method, forest_size, epidemic_size, comparison_type)
+  )
+glimpse(df)
+
+df |>
+  mutate(
+    epidemic_size = factor(epidemic_size),
+    label_forest_size = "Forest size",
+    label_comparison_type = "Comparison type",
+    hline = case_when(
+      comparison_type == "H0" ~ 0.05,
+      TRUE ~ 1
+    )
+  ) |>
+  ggplot(aes(
+    x = epidemic_size,
+    y = rejection_rate,
+    group = method
+  )) +
+  facet_nested(
+    cols = vars(label_forest_size, forest_size),
+    rows = vars(label_comparison_type, comparison_type),
+    scales = "free_y"
+  ) +
+  geom_hline(
+    aes(yintercept = hline),
+    linetype = "dotted",
+    color = "grey50",
+    alpha = 0.5,
     linewidth = 0.5
   ) +
-  # diagonal points at polygon centroids
-  geom_point(
-    data = diag_points,
-    aes(x = x_point, y = y_point, shape = method),
-    size = 3,
-    color = "black"
+  geom_line(
+    linewidth = 0.35
   ) +
-  scale_fill_viridis_c(name = "Prop. reject H0", limits = c(0, 1)) +
-  coord_fixed() +
-  scale_x_continuous(breaks = 1:3, labels = levels(df$off_k_A)) +
-  scale_y_continuous(breaks = 1:3, labels = levels(df$off_k_B)) +
-  labs(x = expression(k[A]), y = expression(k[B]))
+  geom_point(
+    aes(shape = method),
+    color = "black",
+    size = 2.5
+  ) +
+  # scale_color_manual(
+  #   values = c("permanova" = "#fbac02ff", "chisq" = "#0248f8ff"),
+  #   labels = c("permanova" = "PERMANOVA", "chisq" = "\U03C7\U00B2 test"),
+  #   name = "Method:"
+  # ) +
+  # scale_fill_manual(
+  #   values = c("permanova" = "#fbac02ff", "chisq" = "#0248f8ff"),
+  #   labels = c("permanova" = "PERMANOVA", "chisq" = "\U03C7\U00B2 test"),
+  #   guide = "none"
+  # ) +
+  scale_shape_manual(
+    values = c("permanova" = 16, "chisq" = 17),
+    labels = c("permanova" = "PERMANOVA", "chisq" = "\U03C7\U00B2 test"),
+    name = "Method:"
+  ) +
+  ggh4x::facetted_pos_scales(
+    y = list(
+      comparison_type == "H0" ~ scale_y_continuous(
+        limits = c(0, 0.03),
+        breaks = seq(0, 0.03, by = 0.01),
+        labels = c("0", "1", "2", "3")
+      ),
+      comparison_type == "\U0394 \U1D458" ~ scale_y_continuous(
+        limits = c(0, 1),
+        breaks = seq(0, 1, by = 0.25),
+        labels = c("0", "25", "50", "75", "100")
+      ),
+      comparison_type == "\U0394 R₀" ~ scale_y_continuous(
+        breaks = seq(0, 1, by = 0.25),
+        labels = c("0", "25", "50", "75", "100")
+      ),
+      comparison_type == "\U0394 R₀ \U0026 \U0394 \U1D458" ~ scale_y_continuous(
+        breaks = seq(0, 1, by = 0.25),
+        labels = c("0", "25", "50", "75", "100")
+      )
+    )
+  ) +
+  labs(
+    x = "Epidemic size",
+    y = "\UFE6A rejecting H₀"
+  ) +
+  theme_classic(base_size = 15) +
+  theme(
+    panel.border = element_rect(colour = "black", fill = NA, linewidth = 0.5),
+    legend.position = "bottom",
+    legend.box = "vertical",
+    legend.margin = margin(t = -5),
+    legend.box.just = "left",
+    legend.spacing = unit(0.1, "cm")
+  )
+ggsave(
+  filename = "figures/power_curves.svg",
+  width = 10,
+  height = 10
+)
+
+# ------------------------------------
+#           Deltas
+# ------------------------------------
+df <- readRDS("data/results_grid.rds")
+plot_delta(df, delta = "R")
+plot_delta(df, delta = "k")
+df |>
+  mutate(delta_k = abs(off_k_A - off_k_B)) |>
+  pull(delta_k) |>
+  unique() |>
+  sort()
