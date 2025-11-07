@@ -308,3 +308,44 @@ mixtree_test <- function(
 
   return(results)
 }
+
+
+# ------------------------------------
+#           Plot Helpers
+# ------------------------------------
+#' @title mixtree_pal, mixtree_lab, theme_mixtree
+#' @description
+#' Color palette, labels, and theme for Mixtree plots.
+mixtree_pal <- c("permanova" = "#fbac02ff", "chisq" = "#0248f8ff")
+mixtree_lab <- c("permanova" = "PERMANOVA", "chisq" = "\U03C7\U00B2 test")
+theme_mixtree <- function() {
+  theme_classic(base_size = 15) +
+    theme(
+      legend.position = "bottom",
+      legend.margin = margin(t = -5),
+      legend.box.just = "left",
+      legend.spacing = unit(0.1, "cm"),
+      panel.border = element_rect(colour = "black", linewidth = 0.5),
+      strip.background = element_rect(linewidth = 0.85)
+    )
+}
+
+#' @title compute_roc
+#' @description
+#' Computes ROC curve data given p-values and true labels.
+#' For each threshold, calculates True Positive Rate (TPR) and False Positive Rate (FPR).
+compute_roc <- function(data, thresholds = seq(0, 1, 0.01)) {
+  map_dfr(thresholds, function(alpha) {
+    predicted <- data$p_value <= alpha
+    TP <- sum(predicted & data$true_different)
+    FP <- sum(predicted & !data$true_different)
+    FN <- sum(!predicted & data$true_different)
+    TN <- sum(!predicted & !data$true_different)
+
+    tibble(
+      threshold = alpha,
+      TPR = TP / (TP + FN),
+      FPR = FP / (FP + TN)
+    )
+  })
+}

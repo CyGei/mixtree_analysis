@@ -13,8 +13,10 @@ options(pipetime.log = "log", pipetime.unit = "mins")
 #' @title param_grid
 #' @description
 #' Build a grid of simulation parameters.
-#' `param_grid` is a tibble containing all combinations of simulation parameters
-#' defined in `sim_config`.
+#' `param_grid` is a tibble containing all combinations
+#' of *simulation parameters* defined in `sim_config` and
+#' *test parameters* defined in `test_config`.
+#' Each row contains a unique `param_id`.
 
 test_config <- list(
   method = c("permanova", "chisq"),
@@ -47,7 +49,7 @@ expand_grid(!!!sim_config) |>
 #' Build a transmission tree given simulation parameters.
 #' `tree_grid` is a tibble containing a 'reference' transmission tree for each
 #' parameter set (`params`) in `param_grid`.
-#' For a given `params`, n `replicates` trees are generated to account for stochasticity.
+#' For a given `params`, n `replicates` trees are generated to account for *stochasticity*.
 #' `tree_id` is defined as `<param_id>_<replicate_id>`.
 
 readRDS("data/param_grid.rds") |>
@@ -70,7 +72,7 @@ readRDS("data/param_grid.rds") |>
 #' @title forest_grid
 #' @description
 #' Build a forest for each reference tree in `tree_grid` and each parameter set
-#' in `param_grid` with matching epidemic size.
+#' in `param_grid` with matching `epidemic_size`.
 #' `forest_grid` is a tibble containing all generated forests.
 #' `forest_id` is defined as `<tree_id>_<param_id>`.
 
@@ -111,10 +113,10 @@ readRDS("data/tree_grid.rds") |>
 # ------------------------------------
 #' @title test_grid
 #' @description
-#' Build all unique pairs of forests from the same reference tree for testing.
+#' Build all unique pairs of forests from the *same reference tree* for testing.
 #' `test_grid` is a tibble containing all unique forest pairs to be tested.
 #' Each row contains `forest_id_A` and `forest_id_B`.
-#' Only pairs where `forest_id_A` < `forest_id_B` are included to avoid
+#' Only pairs where `forest_id_A` <= `forest_id_B` are included to avoid
 #' duplicate tests.
 readRDS("data/forest_grid.rds") |>
   select(forest_id) |>
@@ -139,8 +141,8 @@ readRDS("data/forest_grid.rds") |>
 #' @title results
 #' @description
 #' Perform the specified tests on each forest pair in `test_grid`.
-#' `results` is a tibble containing the results of each test performed.
-#' Each row contains the `forest_id_A`, `forest_id_B`, `method`, `forest_size`, `p_value`.
+#' `results` is a tibble containing the results of each test performed
+#' with columns: `forest_id_A`, `forest_id_B`, `method`, `forest_size`, `p_value`.
 furrr::future_pmap_dfr(
   .l = readRDS("data/test_grid.rds"),
   .f = mixtree_test,
