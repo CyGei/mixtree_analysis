@@ -6,3 +6,7 @@ tibble
 igraph
 vegan
 CyGei/mixtree
+LaplacesDemon
+distcrete
+qs
+arrow

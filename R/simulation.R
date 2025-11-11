@@ -30,7 +30,7 @@ sim_config <- list(
   gt_sd = 6,
   epidemic_size = c(20L, 50L, 100L, 200L),
   duration = 365L,
-  replicates = 10L
+  replicates = 100L
 )
 
 expand_grid(!!!sim_config) |>

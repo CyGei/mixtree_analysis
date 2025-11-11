@@ -3,6 +3,7 @@ library(dplyr)
 library(purrr)
 library(tibble)
 library(tidyr)
+library(arrow)
 
 # =================================================
 # mixtree test wrapper
@@ -49,16 +50,20 @@ as_forest <- function(forest) {
   return(p_value)
 }
 
+
+read_forest <- function(forest_id) {
+  readRDS(paste0("data/forest_grid/forest_", forest_id, ".rds"))
+}
+
 # Run all tests for one pair of forests
 mixtree_test <- function(
   forest_id_A,
   forest_id_B,
-  forests, # named list: forests[["forest_id"]] = matrix
   forest_sizes, # vector of integers
   methods # vector of characters ("chisq", "permanova")
 ) {
-  forest_A <- forests[[forest_id_A]]
-  forest_B <- forests[[forest_id_B]]
+  forest_A <- read_forest(forest_id_A)
+  forest_B <- read_forest(forest_id_B)
 
   grid <- expand_grid(
     forest_size = forest_sizes,
@@ -86,23 +91,33 @@ mixtree_test <- function(
 # Load Data
 # =================================================
 test_grid <- readRDS("data/test_grid.rds")
-forests <- deframe(readRDS("data/forest_grid.rds"))
 
 # =================================================
 # hipercow job function
 # =================================================
-cow_job <- function(idx) {
+mixtree_job <- function(idx) {
   subgrid <- test_grid[idx, ]
-  purrr::pmap_dfr(
+  out <- purrr::pmap_dfr(
     .l = subgrid,
     .f = function(forest_id_A, forest_id_B) {
-      mixtree_test(
+      test <- mixtree_test(
         forest_id_A = forest_id_A,
         forest_id_B = forest_id_B,
-        forests = forests,
         forest_sizes = c(20L, 50L, 100L, 200L),
         methods = c("permanova", "chisq")
       )
+      saveRDS(
+        test,
+        file = paste0(
+          "data/results/",
+          forest_id_A,
+          "-",
+          forest_id_B,
+          ".rds"
+        )
+      )
+      return(test)
     }
   )
+  return(out)
 }

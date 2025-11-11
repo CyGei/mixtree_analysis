@@ -228,6 +228,9 @@ build_forest <- function(tree, params, forest_size = 200L) {
   # Rows = forest ID, Columns = case ID
   forest <- t(replicate(forest_size, simulate_tree(), simplify = TRUE))
   colnames(forest) <- tree$to[-1] # Exclude root case
+  if (nrow(forest) != forest_size) {
+    stop("Forest size mismatch: expected ", forest_size, ", got ", nrow(forest))
+  }
   return(forest)
 }
 
