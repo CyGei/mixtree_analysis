@@ -332,6 +332,12 @@ theme_mixtree <- function() {
       strip.background = element_rect(linewidth = 0.85)
     )
 }
+format_k <- function(k) {
+  case_when(
+    k >= 1e5 ~ "10⁵",
+    TRUE ~ as.character(k)
+  )
+}
 
 #' @title compute_roc
 #' @description
@@ -340,10 +346,10 @@ theme_mixtree <- function() {
 compute_roc <- function(data, thresholds = seq(0, 1, 0.01)) {
   map_dfr(thresholds, function(alpha) {
     predicted <- data$p_value <= alpha
-    TP <- sum(predicted & data$true_different)
-    FP <- sum(predicted & !data$true_different)
-    FN <- sum(!predicted & data$true_different)
-    TN <- sum(!predicted & !data$true_different)
+    TP <- sum(predicted & data$H1)
+    FP <- sum(predicted & !data$H1)
+    FN <- sum(!predicted & data$H1)
+    TN <- sum(!predicted & !data$H1)
 
     tibble(
       threshold = alpha,
@@ -352,3 +358,26 @@ compute_roc <- function(data, thresholds = seq(0, 1, 0.01)) {
     )
   })
 }
+
+# histogram for diagram
+# tibble(
+#   x = rep(1:30, 2),
+#   group = rep(c("A", "B"), each = 30),
+#   value = c(rpois(30, lambda = 10), rpois(30, lambda = 15))
+# ) |>
+#   ggplot(aes(x = factor(x), y = value, fill = group)) +
+#   geom_bar(
+#     stat = "identity",
+#     position = "dodge",
+#     colour = "black",
+#     alpha = 0.75,
+#     width = 0.75,
+#     linewidth = 0.1
+#   ) +
+#   scale_fill_manual(values = c("A" = "#debfff", "B" = "#ffc309")) +
+#   theme_void() +
+#   theme(
+#     legend.position = "none",
+#     panel.border = element_rect(colour = "black", linewidth = 0.5),
+#     strip.background = element_rect(linewidth = 0.85)
+#   )

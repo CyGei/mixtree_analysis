@@ -1,13 +1,140 @@
 # Supplementary figures.
 source("R/packages.R")
 source("R/helpers.R")
+
+# ------------------------------------
+#          Data
+# ------------------------------------
+results_grid <- readRDS("data/results_grid.rds") |>
+  mutate(
+    H1 = param_id_A != param_id_B,
+    reject_H0 = p_value < 0.05,
+
+    delta_R0 = abs(off_R_A - off_R_B),
+    delta_k = abs(off_k_A - off_k_B),
+
+    # Annotations:
+    comparison_type = case_when(
+      !H1 ~ "H₀",
+      off_R_A != off_R_B & off_k_A == off_k_B ~ "\U0394 R₀",
+      off_R_A == off_R_B & off_k_A != off_k_B ~ "\U0394 \U1D458",
+      .default = "\U0394 R₀ \U0026 \U0394 \U1D458"
+    ),
+    comparison_type = factor(
+      comparison_type,
+      levels = c(
+        "\U0394 R₀ \U0026 \U0394 \U1D458",
+        "\U0394 R₀",
+        "\U0394 \U1D458",
+        "H₀"
+      )
+    ),
+
+    R0_labels = sprintf(
+      "%.1f v %.1f",
+      pmin(off_R_A, off_R_B),
+      pmax(off_R_A, off_R_B)
+    ) |>
+      forcats::fct_reorder(delta_R0),
+
+    k_labels = sprintf(
+      "%s v %s",
+      format_k(pmin(off_k_A, off_k_B)),
+      format_k(pmax(off_k_A, off_k_B))
+    ) |>
+      forcats::fct_reorder(delta_k),
+
+    delta_R0_labels = case_when(
+      delta_R0 == 0 ~ "ΔR₀ = 0",
+      TRUE ~ paste0("ΔR₀ = ", delta_R0)
+    ) |>
+      factor(levels = c("ΔR₀ = 0", "ΔR₀ = 0.5", "ΔR₀ = 1", "ΔR₀ = 1.5")),
+
+    delta_k_labels = case_when(
+      delta_k == 0 ~ "Δ\U1D458 = 0",
+      delta_k >= 99999 ~ "Δ\U1D458 = 10⁵",
+      TRUE ~ paste0("Δ\U1D458 = ", delta_k)
+    ) |>
+      as.factor()
+  )
+
+# ------------------------------------
+#           ROC curves
+# ------------------------------------
+#' @title compute_roc()
+#' @description
+#' Computes true positive rates (TPR) and false positive rates (FPR) across varying p-value thresholds.
+#' A true positive is defined as correctly rejecting the null hypothesis when forests differ in parameters.
+#' A false positive is incorrectly rejecting the null hypothesis when forests are generated under the same parameters.
+#' - `TPR`: true positive rate (sensitivity)
+#' - `FPR`: false positive rate (1 - specificity)
+results_grid |>
+  group_by(method, forest_size, epidemic_size) |>
+  group_modify(~ compute_roc(.x)) |>
+  ungroup() |>
+  mutate(
+    label_epidemic_size = "Epidemic size",
+    label_forest_size = "Forest size"
+  ) |>
+  ggplot(aes(x = FPR, y = TPR, color = method)) +
+  facet_nested(
+    cols = vars(label_epidemic_size, epidemic_size),
+    rows = vars(label_forest_size, forest_size),
+    strip = strip_nested(
+      text_x = list(
+        element_text(size = 17),
+        element_text(size = 16)
+      ),
+      text_y = list(
+        element_text(size = 17),
+        element_text(size = 16)
+      ),
+      by_layer_x = TRUE,
+      by_layer_y = TRUE
+    )
+  ) +
+  geom_abline(
+    intercept = 0,
+    slope = 1,
+    linetype = "dashed",
+    color = "gray50",
+    alpha = 0.5,
+    linewidth = 0.25
+  ) +
+  geom_line() +
+  scale_color_manual(
+    values = c("permanova" = "#e68613", "chisq" = "#1f65cc"),
+    labels = mixtree_lab,
+    name = "Method:"
+  ) +
+  coord_cartesian(
+    xlim = c(0, 1),
+    ylim = c(0, 1),
+    expand = TRUE,
+    clip = "off"
+  ) +
+  labs(
+    x = "1 - specificity",
+    y = "Sensitivity",
+    color = "Forest size:"
+  ) +
+  theme_mixtree() +
+  theme(axis.text.x = element_blank())
+
+ggsave(
+  filename = "figures/roc.png",
+  width = 7.5,
+  height = 7.5,
+  units = "in",
+  dpi = 300
+)
+
 # ------------------------------------
 #           AUC
 # ------------------------------------
 #' @title auc_df
 #' @description
-#' A tibble summarising Area Under the Curve (AUC) values for ROC curves
-#' from the simulation study `results_grid.rds`.
+#' A tibble summarising Area Under the Curve (AUC) values for ROC curves.
 #' It computes AUC for each combination of statistical test method,
 #' forest size, and epidemic size.
 #' Columns:
@@ -16,12 +143,11 @@ source("R/helpers.R")
 #' - `epidemic_size`: number of vertices per transmission tree
 #' - `AUC`: Area Under the Curve value
 
-auc_df <- readRDS("data/results_grid.rds") |>
-  mutate(true_different = param_id_A != param_id_B) |>
+auc_df <- results_grid |>
   group_by(method, forest_size, epidemic_size) |>
   summarise(
     AUC = pROC::roc(
-      response = true_different,
+      response = H1,
       predictor = 1 - p_value,
       quiet = TRUE
     )$auc |>
@@ -45,6 +171,7 @@ auc_df |>
   ) +
   scale_fill_manual(
     values = mixtree_pal,
+    labels = mixtree_lab,
     name = "Method:"
   ) +
   scale_y_continuous(expand = c(0, 0), limits = c(0, 1)) +
@@ -53,36 +180,20 @@ auc_df |>
     y = "Area Under the Curve (AUC)"
   ) +
   theme_mixtree()
+
 ggsave(
-  filename = "figures/auc.svg",
-  width = 8,
-  height = 6
+  filename = "figures/auc.png",
+  width = 7.5,
+  height = 5,
+  units = "in",
+  dpi = 300
 )
 
 # ------------------------------------
 #           p-values by delta
 # ------------------------------------
 
-delta_df <- readRDS("data/results_grid.rds") |>
-  mutate(
-    H0 = param_id_A == param_id_B,
-    reject_H0 = p_value < 0.05,
-    comparison_type = case_when(
-      H0 ~ "H₀",
-      off_R_A != off_R_B & off_k_A == off_k_B ~ "\U0394 R₀",
-      off_R_A == off_R_B & off_k_A != off_k_B ~ "\U0394 \U1D458",
-      TRUE ~ "\U0394 R₀ \U0026 \U0394 \U1D458"
-    ),
-    comparison_type = factor(
-      comparison_type,
-      levels = c(
-        "\U0394 R₀ \U0026 \U0394 \U1D458",
-        "\U0394 R₀",
-        "\U0394 \U1D458",
-        "H₀"
-      )
-    )
-  ) |>
+delta_df <- results_grid |>
   summarise(
     mean_pval = mean(p_value),
     q25 = quantile(p_value, 0.25),
@@ -92,7 +203,6 @@ delta_df <- readRDS("data/results_grid.rds") |>
     ymax_fill = ifelse(unique(comparison_type) == "H₀", Inf, 0.05),
     .by = c(method, forest_size, epidemic_size, comparison_type)
   )
-glimpse(delta_df)
 
 delta_df |>
   mutate(
@@ -108,12 +218,22 @@ delta_df |>
     x = epidemic_size,
     y = median_pval,
     group = interaction(method, epidemic_size, forest_size, comparison_type),
-    color = method,
-    fill = method
   )) +
   facet_nested(
     cols = vars(label_forest_size, forest_size),
     rows = vars(label_comparison_type, comparison_type),
+    strip = strip_nested(
+      text_x = list(
+        element_text(size = 17),
+        element_text(size = 16)
+      ),
+      text_y = list(
+        element_text(size = 17),
+        element_text(size = 16)
+      ),
+      by_layer_x = TRUE,
+      by_layer_y = TRUE
+    )
   ) +
   # Target geoms
   geom_rect(
@@ -136,21 +256,20 @@ delta_df |>
     position = position_dodge(width = 0.5)
   ) +
   geom_point(
+    aes(shape = method),
     position = position_dodge(width = 0.5),
-    colour = "black",
-    shape = 21,
-    size = 3,
+    size = 2.5,
     stroke = 0.25
   ) +
-  scale_color_manual(
-    values = mixtree_pal,
+  scale_shape_manual(
+    values = c("permanova" = 19, "chisq" = 15),
     labels = mixtree_lab,
-    guide = "none"
+    name = "Method:"
   ) +
   scale_fill_manual(
     values = c(mixtree_pal, "Target" = "grey90"),
     labels = c(mixtree_lab, "Target" = "Target"),
-    name = "Method:"
+    name = ""
   ) +
   labs(
     x = "Epidemic size",
@@ -158,7 +277,102 @@ delta_df |>
   ) +
   theme_mixtree() +
   guides(
-    fill = guide_legend(
-      override.aes = list(size = 5, colour = "black", linewidth = 0.25)
+    shape = guide_legend(override.aes = list(size = 5))
+  )
+
+ggsave(
+  filename = "figures/delta_pval.png",
+  width = 7.5,
+  height = 7.5,
+  units = "in",
+  dpi = 300
+)
+
+# ------------------------------------
+#           delta heatmap
+# ------------------------------------
+#' @title delta_heatmap
+#' @description
+#' A heatmap visualising the sensitivity (rejection rate) of statistical tests
+#' across varying differences in R0 and k parameters (ΔR0 and Δk).
+#' The heatmap is generated for a fixed forest size of 200 trees per forest.
+#' Columns:
+#' - `method`: statistical test used ("chisq" or "permanova")
+#' - `R0_labels`: labels representing pairs of R0 values compared
+#' - `k_labels`: labels representing pairs of k values compared
+#' - `comparison_type`: type of comparison made (ΔR0, Δk, ΔR0 & Δk, or H0)
+#' - `forest_size`: number of transmission trees per forest (fixed at 200)
+#' - `epidemic_size`: number of vertices per transmission tree
+#' - `rejection_rate`: proportion of tests rejecting the null hypothesis (sensitivity)
+
+delta_df <-
+  results_grid |>
+  filter(H1) |>
+  filter(forest_size == 200) |>
+  summarise(
+    rejection_rate = mean(reject_H0),
+    .by = c(
+      method,
+      R0_labels,
+      k_labels,
+      comparison_type,
+      forest_size,
+      epidemic_size
     )
   )
+
+delta_df |>
+  mutate(
+    epidemic_size_label = "Epidemic size",
+    forest_size = factor(forest_size),
+    method_label = case_when(
+      method == "chisq" ~ "\U03C7\U00B2 test",
+      method == "permanova" ~ "PERMANOVA"
+    ) |>
+      factor(levels = c("\U03C7\U00B2 test", "PERMANOVA"))
+  ) |>
+  ggplot(aes(x = R0_labels, y = k_labels, fill = rejection_rate)) +
+  facet_nested(
+    rows = vars(method_label),
+    cols = vars(epidemic_size_label, epidemic_size),
+    strip = strip_nested(
+      text_x = list(
+        element_text(size = 17),
+        element_text(size = 16)
+      ),
+      text_y = list(
+        element_text(size = 16)
+      ),
+      by_layer_x = TRUE,
+      by_layer_y = TRUE
+    )
+  ) +
+  geom_tile(color = "white") +
+  scale_fill_viridis_c(
+    name = "Sensitivity",
+    option = "viridis",
+    limits = c(0, 1),
+    guide = guide_colorbar(
+      title.position = "top",
+      title.hjust = 0.5,
+      barwidth = 10,
+      barheight = 0.5,
+      frame.linewidth = 0.5,
+      ticks.linewidth = 0.1,
+    )
+  ) +
+  labs(
+    x = "\U0394 R₀",
+    y = "\U0394 \U1D458"
+  ) +
+  theme_mixtree() +
+  coord_fixed() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggsave(
+  "figures/delta_heatmap_m200.png",
+  width = 7.5,
+  height = 8.5,
+  units = "in",
+  dpi = 300
+)

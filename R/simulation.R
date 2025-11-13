@@ -179,13 +179,25 @@ furrr::future_pmap_dfr(
 #' - `p_value`: resulting p-value
 
 readRDS("data/results.rds") |>
-  bind_rows() |>
   as_tibble() |>
+  separate_wider_delim(
+    forest_id_A,
+    delim = "_",
+    names = c("tree_param_id_A", "tree_replicate_id_A", "param_id_A"),
+    cols_remove = FALSE
+  ) |>
+  separate_wider_delim(
+    forest_id_B,
+    delim = "_",
+    names = c("tree_param_id_B", "tree_replicate_id_B", "param_id_B"),
+    cols_remove = FALSE
+  ) |>
   mutate(
-    tree_id = str_extract(forest_id_A, "^\\d+_\\d+"),
-    param_id_A = str_extract(forest_id_A, "(?<=_)\\d+$"),
-    param_id_B = str_extract(forest_id_B, "(?<=_)\\d+$"),
-    .after = starts_with("forest_id")
+    tree_id = paste(tree_param_id_A, tree_replicate_id_A, sep = "_")
+  ) |>
+  dplyr::select(
+    -starts_with("tree_param_id"),
+    -starts_with("tree_replicate_id")
   ) |>
   left_join(
     readRDS("data/param_grid.rds") |>

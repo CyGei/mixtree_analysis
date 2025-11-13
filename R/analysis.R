@@ -3,82 +3,67 @@ source("R/packages.R")
 source("R/helpers.R")
 
 # ------------------------------------
-#           ROC curves
+#          Data
 # ------------------------------------
-#' @title roc_df
-#' @description
-#' A tibble containing data for plotting ROC curves from the simulation study `results_grid.rds`.
-#' It computes true positive rates (TPR) and false positive rates (FPR) across varying p-value thresholds.
-#' A true positive is defined as correctly rejecting the null hypothesis when forests differ in parameters.
-#' A false positive is incorrectly rejecting the null hypothesis when forests are generated under the same parameters.
-#' Columns:
-#' - `method`: statistical test used ("chisq" or "permanova")
-#' - `forest_size`: number of transmission trees per forest
-#' - `epidemic_size`: number of vertices per transmission tree
-#' - `threshold`: significance level (alpha)
-#' - `TPR`: true positive rate (sensitivity)
-#' - `FPR`: false positive rate (1 - specificity)
-roc_df <- readRDS("data/results_grid.rds") |>
-  mutate(true_different = param_id_A != param_id_B) |>
-  group_by(method, forest_size, epidemic_size) |>
-  group_modify(~ compute_roc(.x)) |>
-  ungroup() |>
-  mutate(
-    label_epidemic_size = "Epidemic size",
-    label_forest_size = "Forest size"
+format_k <- function(k) {
+  case_when(
+    k >= 1e5 ~ "10⁵",
+    TRUE ~ as.character(k)
   )
+}
 
+results_grid <- readRDS("data/results_grid.rds") |>
+  mutate(
+    H1 = param_id_A != param_id_B,
+    reject_H0 = p_value < 0.05,
 
-ggplot(roc_df, aes(x = FPR, y = TPR, color = method)) +
-  facet_nested(
-    cols = vars(label_epidemic_size, epidemic_size),
-    rows = vars(label_forest_size, forest_size),
-    strip = strip_nested(
-      text_x = list(
-        element_text(size = 17),
-        element_text(size = 16)
-      ),
-      text_y = list(
-        element_text(size = 17),
-        element_text(size = 16)
-      ),
-      by_layer_x = TRUE,
-      by_layer_y = TRUE
-    )
-  ) +
-  geom_abline(
-    intercept = 0,
-    slope = 1,
-    linetype = "dashed",
-    color = "gray50",
-    alpha = 0.5,
-    linewidth = 0.25
-  ) +
-  geom_line() +
-  scale_color_manual(
-    values = c("permanova" = "#e68613", "chisq" = "#1f65cc"),
-    name = "Method:"
-  ) +
-  coord_cartesian(
-    xlim = c(0, 1),
-    ylim = c(0, 1),
-    expand = TRUE,
-    clip = "off"
-  ) +
-  labs(
-    x = "1 - specificity",
-    y = "Sensitivity",
-    color = "Forest size:"
-  ) +
-  theme_mixtree() +
-  theme(axis.text.x = element_blank())
+    delta_R0 = abs(off_R_A - off_R_B),
+    delta_k = abs(off_k_A - off_k_B),
 
-ggsave(
-  filename = "figures/roc.svg",
-  width = 8,
-  height = 8
-)
+    # Annotations:
+    comparison_type = case_when(
+      !H1 ~ "H₀",
+      off_R_A != off_R_B & off_k_A == off_k_B ~ "\U0394 R₀",
+      off_R_A == off_R_B & off_k_A != off_k_B ~ "\U0394 \U1D458",
+      .default = "\U0394 R₀ \U0026 \U0394 \U1D458"
+    ),
+    comparison_type = factor(
+      comparison_type,
+      levels = c(
+        "\U0394 R₀ \U0026 \U0394 \U1D458",
+        "\U0394 R₀",
+        "\U0394 \U1D458",
+        "H₀"
+      )
+    ),
 
+    R0_labels = sprintf(
+      "%.1f v %.1f",
+      pmin(off_R_A, off_R_B),
+      pmax(off_R_A, off_R_B)
+    ) |>
+      forcats::fct_reorder(delta_R0),
+
+    k_labels = sprintf(
+      "%s v %s",
+      format_k(pmin(off_k_A, off_k_B)),
+      format_k(pmax(off_k_A, off_k_B))
+    ) |>
+      forcats::fct_reorder(delta_k),
+
+    delta_R0_labels = case_when(
+      delta_R0 == 0 ~ "ΔR₀ = 0",
+      TRUE ~ paste0("ΔR₀ = ", delta_R0)
+    ) |>
+      factor(levels = c("ΔR₀ = 0", "ΔR₀ = 0.5", "ΔR₀ = 1", "ΔR₀ = 1.5")),
+
+    delta_k_labels = case_when(
+      delta_k == 0 ~ "Δ\U1D458 = 0",
+      delta_k >= 99999 ~ "Δ\U1D458 = 10⁵",
+      TRUE ~ paste0("Δ\U1D458 = ", delta_k)
+    ) |>
+      as.factor()
+  )
 
 # ------------------------------------
 #           Power curves
@@ -99,31 +84,11 @@ ggsave(
 #' - `comparison_type`: type of parameter difference being tested (ΔR₀, Δk, both, or H₀)
 #' - `rejection_rate`: proportion of tests rejecting H₀ at significance level 0.05.
 
-delta_df <- readRDS("data/results_grid.rds") |>
-  mutate(
-    H0 = param_id_A == param_id_B,
-    reject_H0 = p_value < 0.05,
-    comparison_type = case_when(
-      H0 ~ "H₀",
-      off_R_A != off_R_B & off_k_A == off_k_B ~ "\U0394 R₀",
-      off_R_A == off_R_B & off_k_A != off_k_B ~ "\U0394 \U1D458",
-      TRUE ~ "\U0394 R₀ \U0026 \U0394 \U1D458"
-    ),
-    comparison_type = factor(
-      comparison_type,
-      levels = c(
-        "\U0394 R₀ \U0026 \U0394 \U1D458",
-        "\U0394 R₀",
-        "\U0394 \U1D458",
-        "H₀"
-      )
-    )
-  ) |>
+delta_df <- results_grid |>
   summarise(
     rejection_rate = mean(reject_H0),
     .by = c(method, forest_size, epidemic_size, comparison_type)
   )
-glimpse(delta_df)
 
 delta_df |>
   mutate(
@@ -138,9 +103,7 @@ delta_df |>
   ggplot(aes(
     x = epidemic_size,
     y = rejection_rate,
-    group = method,
-    color = method,
-    fill = method
+    group = method
   )) +
   facet_nested(
     cols = vars(label_forest_size, forest_size),
@@ -162,7 +125,6 @@ delta_df |>
   geom_hline(
     aes(yintercept = hline, linetype = "Target"),
     color = "black",
-    alpha = 0.5,
     linewidth = 0.5
   ) +
   geom_line(
@@ -170,27 +132,15 @@ delta_df |>
   ) +
   geom_point(
     aes(shape = method),
-    color = "black",
-    size = 3,
-    stroke = 0.25
-  ) +
-  scale_color_manual(
-    values = mixtree_pal,
-    labels = mixtree_lab,
-    guide = "none"
-  ) +
-  scale_fill_manual(
-    values = mixtree_pal,
-    labels = mixtree_lab,
-    name = "Method:"
+    size = 2.25
   ) +
   scale_shape_manual(
-    values = c("permanova" = 21, "chisq" = 24),
+    values = c("permanova" = 19, "chisq" = 15),
     labels = mixtree_lab,
     name = "Method:"
   ) +
   scale_linetype_manual(
-    values = c("Target" = "solid"),
+    values = c("Target" = "dashed"),
     labels = c("Target" = "Target"),
     name = ""
   ) +
@@ -226,10 +176,14 @@ delta_df |>
   )
 
 ggsave(
-  filename = "figures/power_curves.svg",
-  width = 10,
-  height = 10
+  filename = "figures/power_curves.png",
+  width = 7.5,
+  height = 7.5,
+  units = "in",
+  dpi = 300
 )
+
+
 # ------------------------------------
 #           Regression model
 # ------------------------------------
@@ -394,25 +348,3 @@ broom::tidy(m1, conf.int = FALSE) |>
   ) |>
   select(term, odds_ratio, p.value) |>
   print(n = Inf)
-
-# average diff in rejection rate between methods for
-# forest_size = 20 across all epidemic sizes under comparison_type = H0
-delta_df |>
-  filter(
-    forest_size >= 100,
-    comparison_type %in% c("\U0394 R₀ \U0026 \U0394 \U1D458", "\U0394 \U1D458")
-  ) |>
-  pivot_wider(
-    names_from = method,
-    values_from = rejection_rate
-  ) |>
-  select(-chisq) |>
-  summarise(
-    avg_rejection_rate = mean(permanova) * 100
-  )
-mutate(
-  diff = chisq - permanova
-) |>
-  summarise(
-    avg_diff = mean(diff) * 100
-  )
