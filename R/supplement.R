@@ -316,7 +316,6 @@ delta_df <-
       R0_labels,
       k_labels,
       comparison_type,
-      forest_size,
       epidemic_size
     )
   )
@@ -324,7 +323,6 @@ delta_df <-
 delta_df |>
   mutate(
     epidemic_size_label = "Epidemic size",
-    forest_size = factor(forest_size),
     method_label = case_when(
       method == "chisq" ~ "\U03C7\U00B2 test",
       method == "permanova" ~ "PERMANOVA"
@@ -376,3 +374,101 @@ ggsave(
   units = "in",
   dpi = 300
 )
+
+# ------------------------------------
+#      delta_R0 lineplots
+# ------------------------------------
+#' @title delta_R0_lineplots
+#' @description
+#' Figure illustrating the sensitivity (rejection rate) of the PERMANOVA test
+#' when comparing forests that differ only in R0 (ΔR0),
+#' across varying levels of overdispersion (k) and epidemic sizes.
+delta_df <-
+  results_grid |>
+  filter(
+    H1,
+    forest_size == 200,
+    method == "permanova",
+    comparison_type == "\U0394 R₀",
+    off_k_A == off_k_B
+  ) |>
+  summarise(
+    rejection_rate = mean(reject_H0),
+    .by = c(
+      epidemic_size,
+      off_k_A,
+      delta_R0
+    )
+  )
+
+delta_df |>
+  mutate(
+    off_k_A = factor(off_k_A),
+    off_k_A = ifelse(off_k_A == 100000, "10⁵", as.character(off_k_A)),
+    delta_R0 = factor(delta_R0),
+    epidemic_size = factor(epidemic_size),
+    epidemic_size_label = "Epidemic size"
+  ) |>
+  ggplot(
+    aes(
+      x = off_k_A,
+      y = rejection_rate,
+      group = interaction(epidemic_size, delta_R0)
+    ),
+  ) +
+  facet_nested(
+    cols = vars(epidemic_size_label, epidemic_size),
+    strip = strip_nested(
+      text_x = list(
+        element_text(size = 17),
+        element_text(size = 16)
+      ),
+      text_y = list(
+        element_text(size = 16)
+      ),
+      by_layer_x = TRUE,
+      by_layer_y = TRUE
+    )
+  ) +
+  geom_line(
+    aes(color = delta_R0),
+    linewidth = 0.75
+  ) +
+  geom_point(
+    aes(fill = delta_R0),
+    color = "white",
+    shape = 21,
+    size = 4.2,
+    stroke = 0.5
+  ) +
+  scale_fill_brewer(
+    palette = "Dark2",
+    name = "\U0394 R₀"
+  ) +
+  scale_color_brewer(
+    palette = "Dark2",
+    name = "\U0394 R₀"
+  ) +
+  theme_mixtree() +
+  labs(
+    x = "\U1D458",
+    y = "Sensitivity"
+  )
+
+ggsave(
+  "figures/delta_R0_lineplots_m200.png",
+  width = 7.5,
+  height = 7.5,
+  units = "in",
+  dpi = 300
+)
+
+delta_df |>
+  mutate(
+    delta_R0_below_1 = delta_R0 < 1,
+    overdispersed = off_k_A < 0.5
+  ) |>
+  summarise(
+    mean = mean(rejection_rate),
+    .by = c(delta_R0_below_1, overdispersed)
+  )

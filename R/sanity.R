@@ -14,6 +14,7 @@ options(pipetime.log = "log", pipetime.unit = "min")
 #' @description
 #' We check that, for each tree, we have all pairwise forest comparisons.
 #' For n forests, there should be n * (n + 1) / 2 pairs (including self-comparisons).
+#' Output should be empty if all trees have complete comparisons.
 readRDS("data/results_grid.rds") |>
   summarise(
     n_forests = n_distinct(c(forest_id_A, forest_id_B)),
@@ -33,12 +34,17 @@ readRDS("data/results_grid.rds") |>
 
 trees <- readRDS("data/tree_grid.rds") |>
   #tree_id = <param_id>_<replicate>
-  mutate(
-    param_id = as.integer(str_extract(tree_id, "^[^_]+"))
+  separate_wider_delim(
+    tree_id,
+    delim = "_",
+    names = c("param_id", "replicate"),
+    cols_remove = FALSE
   ) |>
+  select(-replicate) |>
   left_join(
     readRDS("data/param_grid.rds") |>
-      select(param_id, params),
+      select(param_id, params) |>
+      mutate(param_id = as.character(param_id)),
     by = "param_id"
   ) |>
   mutate(
@@ -120,66 +126,129 @@ Ri |>
 # ------------------------------------
 #           Check Forests
 # ------------------------------------
+#' @title entropy_grid
 #' @description
-#' We check that the forests have enough entropy.
-#' Entropy is defined as the variance in ancestries for each case.
+#' Calculate entropy of each forest in the forest grid
+#' and plot distribution of entropy values faceted by simulation parameters.
+#' Entropy is calculated using the `o2ools::get_entropy` function.
+#' Entropy provides a measure of uncertainty in ancestry assignments within each forest.
+#' Higher entropy values indicate greater uncertainty, while lower values suggest more definitive ancestry assignments.
 
-forest_grid <- readRDS("data/forest_grid.rds")
-
-entropy_grid <- forest_grid |>
-  group_by(forest_id) |>
-  group_modify(
-    ~ {
-      mat <- .x$forest[[1]]
-      out <- as.data.frame(mat, stringsAsFactors = FALSE)
-      names(out) <- paste0("alpha_", colnames(mat))
-      class(out) <- c("outbreaker_chains", class(out))
-      tibble(entropy = o2ools::get_entropy(out))
-    }
-  ) |>
-  summarise(entropy = mean(entropy))
-
-
-entropy_grid |>
-  #forest_id = <tree_id>_<param_id>
+forest_grid <- qs::qread("data/forest_grid.qs")
+forest_grid |>
   mutate(
-    param_id = as.integer(str_extract(forest_id, "(?<=_)[^_]+$"))
+    entropy = map_dbl(
+      forest,
+      ~ {
+        out <- as.data.frame(.x, stringsAsFactors = FALSE) |>
+          mutate(across(everything(), ~ as.character(.x)))
+        names(out) <- paste0("alpha_", as.character(2:(ncol(out) + 1)))
+        class(out) <- c("outbreaker_chains", class(out))
+        o2ools::get_entropy(out) |> mean()
+      }
+    )
+  ) |>
+  select(forest_id, entropy) |>
+  saveRDS("data/entropy_grid.rds")
+
+readRDS("data/entropy_grid.rds") |>
+  separate_wider_delim(
+    forest_id,
+    delim = "_",
+    names = c("tree_param_id", "tree_replicate", "param_id"),
+    cols_remove = FALSE
   ) |>
   left_join(
     readRDS("data/param_grid.rds") |>
-      select(-c(params, starts_with("gt_"), duration, replicates)),
+      select(-c(params, starts_with("gt_"), duration, replicates)) |>
+      mutate(param_id = as.character(param_id)),
     by = "param_id"
   ) |>
+  mutate(epidemic_size_label = "Epidemic size", off_k = format_k(off_k)) |>
   ggplot() +
   ggh4x::facet_nested(
-    cols = vars(epidemic_size),
+    cols = vars(epidemic_size_label, epidemic_size),
     rows = vars(off_R, off_k),
     labeller = labeller(
       off_R = function(x) paste0("R₀=", x),
-      off_k = function(x) paste0("\U1D458=", x),
-      epidemic_size = function(x) paste0("Epidemic size ε = ", x)
+      off_k = function(x) paste0("\U1D458=", x)
+    ),
+    strip = strip_nested(
+      text_x = list(
+        element_text(size = 17),
+        element_text(size = 16)
+      ),
+      text_y = list(
+        element_text(size = 16),
+        element_text(size = 11)
+      ),
+      by_layer_x = TRUE,
+      by_layer_y = TRUE
     )
   ) +
   geom_histogram(
     aes(x = entropy),
-    # bins = 30,
-    fill = "lightblue",
-    colour = "black",
+    binwidth = 0.01,
+    fill = "blue",
     linewidth = 0.2
   ) +
-  scale_y_continuous(breaks = scales::pretty_breaks(n = 4)) +
-  theme_bw() +
+  scale_y_continuous(breaks = c(0, 400, 800)) +
+  scale_x_continuous(
+    limits = c(0.4, 1),
+    breaks = seq(0.5, 1, by = 0.25)
+  ) +
+  theme_mixtree() +
   theme(
-    axis.line.x = element_line(colour = "black", linewidth = 0.5),
-    #remove grid lines
-    panel.grid.major = element_blank(),
-    panel.grid.minor = element_blank(),
-    panel.border = element_rect(colour = "black", fill = NA, linewidth = 0.5),
-    strip.background = element_rect(fill = NA, colour = "black")
+    panel.spacing = unit(0.1, "lines")
   ) +
   labs(
     x = "Entropy",
     y = "Count"
   )
 
-ggsave("figures/entropy.svg", width = 6, height = 8)
+ggsave(
+  "figures/entropy.png",
+  width = 7.5,
+  height = 8.5,
+  units = "in",
+  dpi = 300
+)
+
+
+# create a regression model for entropy vs parameters
+model_df <- readRDS("data/entropy_grid.rds") |>
+  separate_wider_delim(
+    forest_id,
+    delim = "_",
+    names = c("tree_param_id", "tree_replicate", "param_id"),
+    cols_remove = FALSE
+  ) |>
+  left_join(
+    readRDS("data/param_grid.rds") |>
+      select(-c(params, starts_with("gt_"), duration, replicates)) |>
+      mutate(param_id = as.character(param_id)),
+    by = "param_id"
+  ) |>
+  mutate(
+    across(
+      c(epidemic_size, off_R, off_k),
+      ~ factor(.x, levels = sort(unique(.x)))
+    )
+  )
+
+m1 <- lm(
+  entropy ~ epidemic_size + off_R + off_k,
+  data = model_df
+)
+summary(m1)
+m2 <- lm(
+  entropy ~ epidemic_size * off_R * off_k,
+  data = model_df
+)
+summary(m2)
+
+# check for multicollinearity
+#  forest_size_cat +
+#     epidemic_size_cat +
+#     method:epidemic_size_cat +
+#     delta_R0 * delta_k_cat,

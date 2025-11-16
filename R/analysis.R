@@ -5,13 +5,6 @@ source("R/helpers.R")
 # ------------------------------------
 #          Data
 # ------------------------------------
-format_k <- function(k) {
-  case_when(
-    k >= 1e5 ~ "10⁵",
-    TRUE ~ as.character(k)
-  )
-}
-
 results_grid <- readRDS("data/results_grid.rds") |>
   mutate(
     H1 = param_id_A != param_id_B,
@@ -194,69 +187,68 @@ ggsave(
 #' absolute differences in reproduction number (`delta_R0`) and dispersion parameter (`delta_k`)
 #' between forests, and categorical variables for forest size, epidemic size, and method used.
 
-model_df <- readRDS("data/results_grid.rds") |>
+model_df <- results_grid |>
   mutate(
-    H0 = param_id_A == param_id_B,
-    reject_H0 = p_value < 0.05,
-    accept_H0 = !reject_H0,
-    delta_R0 = abs(off_R_A - off_R_B),
-    delta_k = abs(off_k_A - off_k_B),
-    log_delta_k = log1p(delta_k),
-    delta_k_cat = case_when(
+    #factoring
+    delta_k = case_when(
       delta_k == 0 ~ "none",
       delta_k < 1000 ~ "finite",
       TRUE ~ "infinite"
     ) |>
       factor(levels = c("none", "finite", "infinite")),
-    forest_size_cat = factor(forest_size, levels = sort(unique(forest_size))),
-    epidemic_size_cat = factor(
+    forest_size = factor(forest_size, levels = sort(unique(forest_size))),
+    epidemic_size = factor(
       epidemic_size,
       levels = sort(unique(epidemic_size))
     ),
     method = factor(method, levels = c("chisq", "permanova")),
+  ) |>
+  select(
+    H1,
+    reject_H0,
+    method,
+    forest_size,
+    epidemic_size,
+    delta_R0,
+    delta_k
   )
-glimpse(model_df)
 
 # --------- Sensitivity Model ---------
 m1 <- glm(
-  reject_H0 ~ method + forest_size + epidemic_size + delta_R0 * log_delta_k,
-  data = model_df |> filter(H0 == FALSE),
+  reject_H0 ~ method + forest_size + epidemic_size + delta_R0 + delta_k,
+  data = model_df |> filter(H1),
   family = binomial(link = "logit")
 )
+
 m2 <- glm(
-  reject_H0 ~ method + forest_size + epidemic_size + delta_R0 * delta_k_cat,
-  data = model_df |> filter(H0 == FALSE),
+  reject_H0 ~ method + forest_size + epidemic_size + delta_R0 * delta_k,
+  data = model_df |> filter(H1),
   family = binomial(link = "logit")
 )
+
 m3 <- glm(
   reject_H0 ~ method +
-    forest_size_cat +
-    epidemic_size_cat +
-    delta_R0 * delta_k_cat,
-  data = model_df |> filter(H0 == FALSE),
+    forest_size +
+    epidemic_size +
+    method:epidemic_size +
+    delta_R0 * delta_k,
+  data = model_df |> filter(H1),
   family = binomial(link = "logit")
 )
+
 m4 <- glm(
-  reject_H0 ~ method +
-    forest_size_cat +
-    epidemic_size_cat +
-    method:epidemic_size_cat +
-    delta_R0 * delta_k_cat,
-  data = model_df |> filter(H0 == FALSE),
-  family = binomial(link = "logit")
-)
-m5 <- glm(
   reject_H0 ~
-    forest_size_cat +
-    epidemic_size_cat +
-    method:epidemic_size_cat +
-    method * delta_R0 * delta_k_cat,
+    method +
+    forest_size +
+    epidemic_size +
+    method:epidemic_size +
+    method * delta_R0 * delta_k,
   data = model_df |> filter(H0 == FALSE),
   family = binomial(link = "logit")
 )
 
 map_dfr(
-  list(m1, m2, m3, m4, m5),
+  list(m1, m2, m3, m4),
   ~ tibble(
     AIC = AIC(.x),
     BIC = BIC(.x)
@@ -266,82 +258,14 @@ map_dfr(
   arrange(AIC)
 
 map_dfr(
-  list(m1, m2, m3, m4, m5),
+  list(m1, m2, m3, m4),
   ~ performance::r2(.x) |>
     as_tibble(),
   .id = "model"
 ) |>
   arrange(desc(model))
 
-broom::tidy(m5, conf.int = FALSE) |>
-  mutate(
-    odds_ratio = exp(estimate),
-    across(where(is.numeric), ~ round(.x, 2))
-  ) |>
-  select(term, odds_ratio, p.value) |>
-  View()
-# kableExtra::kable(
-#   format = "latex",
-#   booktabs = TRUE,
-#   col.names = c("Predictor", "Odds Ratio", "p-value"),
-#   caption = "Model Results"
-# ) |>
-#   kableExtra::kable_styling(
-#     latex_options = c("hold_position", "scale_down")
-#   )
-
-# --------- Specificity Model ---------
-m1 <- glm(
-  accept_H0 ~ method +
-    forest_size_cat +
-    epidemic_size_cat,
-  data = model_df |> filter(H0 == TRUE),
-  family = binomial(link = "logit")
-)
-
-m2 <- glm(
-  accept_H0 ~ method +
-    forest_size_cat +
-    epidemic_size_cat +
-    off_R_A +
-    off_k_A,
-  data = model_df |> filter(H0 == TRUE),
-  family = binomial(link = "logit")
-)
-m3 <- glm(
-  accept_H0 ~ method +
-    forest_size_cat +
-    epidemic_size_cat +
-    method:epidemic_size_cat +
-    off_R_A +
-    off_k_A,
-  data = model_df |> filter(H0 == TRUE),
-  family = binomial(link = "logit")
-)
-m4 <- glm(
-  accept_H0 ~ method * forest_size_cat + epidemic_size_cat,
-  data = model_df |> filter(H0 == TRUE),
-  family = binomial(link = "logit")
-)
-
-map_dfr(
-  list(m1, m2, m3, m4),
-  ~ tibble(
-    AIC = AIC(.x),
-    BIC = BIC(.x)
-  ),
-  .id = "model"
-) |>
-  arrange(AIC)
-
-map_dfr(
-  list(m1, m2, m3, m4),
-  ~ performance::r2(.x),
-  .id = "model"
-) |>
-  arrange(desc(model))
-
-broom::tidy(m1, conf.int = FALSE) |>
+broom::tidy(m4, conf.int = FALSE) |>
   mutate(
     odds_ratio = exp(estimate),
     across(where(is.numeric), ~ round(.x, 2))
