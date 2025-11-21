@@ -20,6 +20,41 @@ ul.task-list li input[type="checkbox"] {
   margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
   vertical-align: middle;
 }
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
 </style>
 
 
@@ -54,14 +89,28 @@ ul.task-list li input[type="checkbox"] {
 <h2 class="anchored" data-anchor-id="background">Background</h2>
 <p>Inferring who infected whom in an outbreak is a complex task but essential for characterising transmission dynamics and guiding public health interventions. Instead of a single definitive transmission tree, epidemiologists often consider multiple plausible trees forming <em>epidemic forests</em>. Various inference methods and assumptions can yield different epidemic forests, yet no formal test exists to assess whether these differences are statistically significant. We propose such a framework using a chi-square test and permutational multivariate analysis of variance (PERMANOVA).</p>
 </section>
-<section id="repository-structure" class="level2">
-<h2 class="anchored" data-anchor-id="repository-structure">Repository structure</h2>
+<section id="reproducibility" class="level2">
+<h2 class="anchored" data-anchor-id="reproducibility">Reproducibility</h2>
+<p>This project uses <code>renv</code> to manage R package dependencies. To set up your environment to match the analysis exactly:</p>
+<ol type="1">
+<li><strong>Clone</strong> this repository.</li>
+<li><strong>Open</strong> the project in RStudio (or set the working directory to the project root in R).</li>
+<li><strong>Restore</strong> the package library by running the following in the R console:</li>
+</ol>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>renv<span class="sc">::</span><span class="fu">restore</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>This will download and install all required packages (including specific versions from GitHub and CRAN) recorded in the <code>renv.lock</code> file.</p>
 <p>The <code>R</code> directory contains the two main scripts:</p>
 <pre><code>R
 ├── simulation.R -&gt; forest generation + test results
 └── analysis.R -&gt; main results</code></pre>
 <p><code>simulation.R</code> generates epidemic forests under various simulation parameters and performs the chi-square and PERMANOVA tests. Data is stored in the <code>data</code> directory and fully documented in the script. We used a high-performance computing cluster to generate the datasets (<code>hpc</code> folder).</p>
 <p><code>analysis.R</code> generates the main results and figures for the manuscript. This script will load the existing datasets from the <code>data</code> directory.</p>
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="figures/workflow.png" class="img-fluid figure-img"></p>
+<figcaption>forest generation &amp; analysis workflow</figcaption>
+</figure>
+</div>
 </section>
 <section id="accessibilty" class="level2">
 <h2 class="anchored" data-anchor-id="accessibilty">Accessibilty</h2>
