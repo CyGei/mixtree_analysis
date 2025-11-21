@@ -175,6 +175,14 @@ ggsave(
   units = "in",
   dpi = 300
 )
+ggsave(
+  filename = "figures/power_curves.eps",
+  width = 7.5,
+  height = 7.5,
+  units = "in",
+  device = cairo_ps,
+  dpi = 300
+)
 
 
 # ------------------------------------

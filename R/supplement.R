@@ -128,6 +128,14 @@ ggsave(
   units = "in",
   dpi = 300
 )
+ggsave(
+  filename = "figures/roc.eps",
+  width = 7.5,
+  height = 7.5,
+  units = "in",
+  dpi = 300,
+  device = cairo_ps
+)
 
 # ------------------------------------
 #           AUC
@@ -187,6 +195,14 @@ ggsave(
   height = 5,
   units = "in",
   dpi = 300
+)
+ggsave(
+  filename = "figures/auc.eps",
+  width = 7.5,
+  height = 5,
+  units = "in",
+  dpi = 300,
+  device = cairo_ps
 )
 
 # ------------------------------------
@@ -287,7 +303,14 @@ ggsave(
   units = "in",
   dpi = 300
 )
-
+ggsave(
+  filename = "figures/delta_pval.eps",
+  width = 7.5,
+  height = 7.5,
+  units = "in",
+  dpi = 300,
+  device = cairo_ps
+)
 # ------------------------------------
 #      delta_R0 lineplots
 # ------------------------------------
@@ -375,6 +398,14 @@ ggsave(
   units = "in",
   dpi = 300
 )
+ggsave(
+  "figures/delta_R0_lineplots_m200.eps",
+  width = 7.5,
+  height = 7.5,
+  units = "in",
+  dpi = 300,
+  device = cairo_ps
+)
 
 delta_df |>
   mutate(
@@ -424,6 +455,15 @@ plot_list <- map(
       units = "in",
       dpi = 500
     )
+    ggsave(
+      filename = paste0("figures/grid", .x, ".eps"),
+      plot = p,
+      width = 7.5,
+      height = 7.5,
+      units = "in",
+      dpi = 500,
+      device = cairo_ps
+    )
     return(p)
   }
 )
@@ -440,4 +480,12 @@ ggsave(
   height = 10,
   units = "in",
   dpi = 300
+)
+ggsave(
+  filename = "figures/grid_combined.eps",
+  width = 7.5,
+  height = 10,
+  units = "in",
+  dpi = 300,
+  device = cairo_ps
 )
