@@ -246,9 +246,3 @@ m2 <- lm(
   data = model_df
 )
 summary(m2)
-
-# check for multicollinearity
-#  forest_size_cat +
-#     epidemic_size_cat +
-#     method:epidemic_size_cat +
-#     delta_R0 * delta_k_cat,

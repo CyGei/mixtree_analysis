@@ -289,93 +289,6 @@ ggsave(
 )
 
 # ------------------------------------
-#           delta heatmap
-# ------------------------------------
-#' @title delta_heatmap
-#' @description
-#' A heatmap visualising the sensitivity (rejection rate) of statistical tests
-#' across varying differences in R0 and k parameters (ΔR0 and Δk).
-#' The heatmap is generated for a fixed forest size of 200 trees per forest.
-#' Columns:
-#' - `method`: statistical test used ("chisq" or "permanova")
-#' - `R0_labels`: labels representing pairs of R0 values compared
-#' - `k_labels`: labels representing pairs of k values compared
-#' - `comparison_type`: type of comparison made (ΔR0, Δk, ΔR0 & Δk, or H0)
-#' - `forest_size`: number of transmission trees per forest (fixed at 200)
-#' - `epidemic_size`: number of vertices per transmission tree
-#' - `rejection_rate`: proportion of tests rejecting the null hypothesis (sensitivity)
-
-delta_df <-
-  results_grid |>
-  filter(H1) |>
-  filter(forest_size == 200) |>
-  summarise(
-    rejection_rate = mean(reject_H0),
-    .by = c(
-      method,
-      R0_labels,
-      k_labels,
-      comparison_type,
-      epidemic_size
-    )
-  )
-
-delta_df |>
-  mutate(
-    epidemic_size_label = "Epidemic size",
-    method_label = case_when(
-      method == "chisq" ~ "\U03C7\U00B2 test",
-      method == "permanova" ~ "PERMANOVA"
-    ) |>
-      factor(levels = c("\U03C7\U00B2 test", "PERMANOVA"))
-  ) |>
-  ggplot(aes(x = R0_labels, y = k_labels, fill = rejection_rate)) +
-  facet_nested(
-    rows = vars(method_label),
-    cols = vars(epidemic_size_label, epidemic_size),
-    strip = strip_nested(
-      text_x = list(
-        element_text(size = 17),
-        element_text(size = 16)
-      ),
-      text_y = list(
-        element_text(size = 16)
-      ),
-      by_layer_x = TRUE,
-      by_layer_y = TRUE
-    )
-  ) +
-  geom_tile(color = "white") +
-  scale_fill_viridis_c(
-    name = "Sensitivity",
-    option = "viridis",
-    limits = c(0, 1),
-    guide = guide_colorbar(
-      title.position = "top",
-      title.hjust = 0.5,
-      barwidth = 10,
-      barheight = 0.5,
-      frame.linewidth = 0.5,
-      ticks.linewidth = 0.1,
-    )
-  ) +
-  labs(
-    x = "\U0394 R₀",
-    y = "\U0394 \U1D458"
-  ) +
-  theme_mixtree() +
-  coord_fixed() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-
-ggsave(
-  "figures/delta_heatmap_m200.png",
-  width = 7.5,
-  height = 8.5,
-  units = "in",
-  dpi = 300
-)
-
-# ------------------------------------
 #      delta_R0 lineplots
 # ------------------------------------
 #' @title delta_R0_lineplots
@@ -472,3 +385,59 @@ delta_df |>
     mean = mean(rejection_rate),
     .by = c(delta_R0_below_1, overdispersed)
   )
+
+
+# ------------------------------------
+#           grid plot
+# ------------------------------------
+rejection_summary <- results_grid |>
+  mutate(
+    reject_H0 = p_value < 0.05
+  ) |>
+  summarise(
+    prop_reject_H0 = mean(reject_H0),
+    .by = c(
+      "method",
+      "forest_size",
+      "epidemic_size",
+      "off_R_A",
+      "off_R_B",
+      "off_k_A",
+      "off_k_B"
+    )
+  )
+
+
+plot_list <- map(
+  c(20L, 50L, 100L, 200L),
+  ~ {
+    p <- plot_grid(
+      rejection_summary,
+      forest_size = .x,
+      base_size = 10
+    )
+    ggsave(
+      filename = paste0("figures/grid", .x, ".png"),
+      plot = p,
+      width = 7.5,
+      height = 7.5,
+      units = "in",
+      dpi = 500
+    )
+    return(p)
+  }
+)
+
+# Combine plots into one figure + collect legends
+patchwork::wrap_plots(plotlist = plot_list, ncol = 1, guides = "collect") &
+  theme(
+    legend.position = "bottom"
+  )
+
+ggsave(
+  filename = "figures/grid_combined.png",
+  width = 7.5,
+  height = 10,
+  units = "in",
+  dpi = 300
+)

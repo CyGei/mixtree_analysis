@@ -243,7 +243,7 @@ m4 <- glm(
     epidemic_size +
     method:epidemic_size +
     method * delta_R0 * delta_k,
-  data = model_df |> filter(H0 == FALSE),
+  data = model_df |> filter(H1),
   family = binomial(link = "logit")
 )
 
