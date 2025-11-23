@@ -4,7 +4,7 @@ This repository contains code and documentation for the manuscript "A statistica
 
 ## Background
 
-Inferring who infected whom in an outbreak is a complex task but essential for characterising transmission dynamics and guiding public health interventions. Instead of a single definitive transmission tree, epidemiologists often consider multiple plausible trees forming *epidemic forests*. Various inference methods and assumptions can yield different epidemic forests, yet no formal test exists to assess whether these differences are statistically significant. We propose such a framework using a chi-square test and permutational multivariate analysis of variance (PERMANOVA).
+Inferring who infected whom in an outbreak is a complex task but essential for characterising transmission dynamics and guiding public health interventions. Instead of a single definitive transmission tree, epidemiologists often consider multiple plausible trees forming *epidemic forests*. Various inference methods and assumptions can yield different epidemic forests, yet no formal test exists to assess whether these differences are statistically significant. We propose such a framework using an adaptation of a Monte Carlo chi-square test and permutational multivariate analysis of variance (PERMANOVA).
 
 ## Reproducibility
 
