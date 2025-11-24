@@ -1,17 +1,37 @@
-if (!require("pacman")) install.packages("pacman")
-pacman::p_load(
-  outbreaker2,
-  ape,
-  igraph,
-  vegan,
-  distcrete,
-  tidyverse,
-  scales,
-  epitrix,
-  furrr,
-  pROC,
-  ggh4x,
-  colorspace
+cran_packages <- c(
+  "igraph",
+  "vegan",
+  "distcrete",
+  "tidyverse",
+  "arrow",
+  "scales",
+  "epitrix",
+  "purrr",
+  "furrr",
+  "pROC",
+  "ggh4x",
+  "ggtext",
+  "ggnewscale",
+  "tidygraph",
+  "ggraph",
+  "santoku",
+  "patchwork",
+  "cowplot",
+  "colorspace",
+  "LaplacesDemon",
+  "pROC",
+  "conflicted"
 )
-pacman::p_load_gh("CyGei/simulacr") # to simulate outbreaks
-pacman::p_load_gh("CyGei/o2ools") #helper functions for outbreaker2
+github_packages <- c("simulacr", "mixtree", "o2ools", "pipetime") #CyGei
+
+all_packages <- c(cran_packages, github_packages)
+invisible(lapply(all_packages, function(pkg) {
+  suppressPackageStartupMessages(library(pkg, character.only = TRUE))
+}))
+
+conflicted::conflict_prefer_all(winner = "dplyr", quiet = TRUE)
+rm(
+  cran_packages,
+  github_packages,
+  all_packages
+)

@@ -1,3 +1,9 @@
+# files in data/ folder
+data/
+
+# files in hipercow/ folder
+hipercow/**
+
 # History files
 .Rhistory
 .Rapp.history
@@ -5,7 +11,7 @@
 # Session Data files
 .RData
 .RDataTmp
-*.rds
+# *.rds
 # User-specific files
 .Ruserdata
 
@@ -46,4 +52,4 @@ docs/
 po/*~
 
 # RStudio Connect folder
-rsconnect/
+rsconnect/data/forest_grid.rds
